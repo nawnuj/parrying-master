@@ -28,7 +28,7 @@ APMCharacter::APMCharacter()
         FRotator(0.0f, 500.0f, 0.0f);
 
     // 기본 걷기 속도입니다.
-    GetCharacterMovement()->MaxWalkSpeed = 350.0f;
+    GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 
     // 점프 높이에 영향을 주는 값입니다.
     GetCharacterMovement()->JumpZVelocity = 500.0f;
@@ -168,6 +168,36 @@ void APMCharacter::SetupPlayerInputComponent(
             &ACharacter::StopJumping
         );
     }
+
+    // Shift를 누르면 달리기를 시작합니다.
+    if (SprintAction)
+    {
+        EnhancedInputComponent->BindAction(
+            SprintAction,
+            ETriggerEvent::Started,
+            this,
+            &APMCharacter::StartSprint
+        );
+
+        // Shift를 놓으면 걷기 속도로 돌아갑니다.
+        EnhancedInputComponent->BindAction(
+            SprintAction,
+            ETriggerEvent::Completed,
+            this,
+            &APMCharacter::StopSprint
+        );
+
+        /*
+         * 플레이 중 창 포커스를 잃는 등의 이유로 입력이 취소된 경우에도
+         * 걷기 속도로 돌아갑니다.
+         */
+        EnhancedInputComponent->BindAction(
+            SprintAction,
+            ETriggerEvent::Canceled,
+            this,
+            &APMCharacter::StopSprint
+        );
+    }
 }
 
 void APMCharacter::Move(const FInputActionValue& Value)
@@ -230,4 +260,14 @@ void APMCharacter::Look(const FInputActionValue& Value)
     AddControllerPitchInput(
         LookValue.Y * MouseSensitivity
     );
+}
+
+void APMCharacter::StartSprint()
+{
+    GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+}
+
+void APMCharacter::StopSprint()
+{
+    GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }

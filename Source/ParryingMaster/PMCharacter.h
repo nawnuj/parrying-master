@@ -79,6 +79,32 @@ protected:
     )
     TObjectPtr<UInputAction> JumpAction;
 
+    // IA_Sprint를 연결할 자리입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
+    TObjectPtr<UInputAction> SprintAction;
+
+    // 기본 걷기 속도입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Movement",
+        meta = (ClampMin = "0.0")
+    )
+    float WalkSpeed = 350.0f;
+
+    // Shift를 누르고 있을 때의 달리기 속도입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Movement",
+        meta = (ClampMin = "0.0")
+    )
+    float SprintSpeed = 600.0f;
+
     // 마우스 카메라 감도입니다.
     // BP_PMCharacter의 클래스 디폴트에서 조절할 수 있습니다.
     UPROPERTY(
@@ -94,4 +120,7 @@ private:
 
     // 마우스 움직임을 처리합니다.
     void Look(const FInputActionValue& Value);
+
+    void StartSprint();
+    void StopSprint();
 };
