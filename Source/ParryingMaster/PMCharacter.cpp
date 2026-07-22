@@ -198,6 +198,17 @@ void APMCharacter::SetupPlayerInputComponent(
             &APMCharacter::StopSprint
         );
     }
+
+    // Left Ctrl을 누르면 회피를 시도합니다.
+    if (DodgeAction)
+    {
+        EnhancedInputComponent->BindAction(
+            DodgeAction,
+            ETriggerEvent::Started,
+            this,
+            &APMCharacter::Dodge
+        );
+    }
 }
 
 void APMCharacter::Move(const FInputActionValue& Value)
@@ -270,4 +281,74 @@ void APMCharacter::StartSprint()
 void APMCharacter::StopSprint()
 {
     GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+}
+
+void APMCharacter::Dodge()
+{
+    // 아직 쿨다운 중이면 회피하지 않습니다.
+    if (!bCanDodge)
+    {
+        return;
+    }
+
+    // 공중에서는 회피하지 못하게 합니다.
+    if (GetCharacterMovement()->IsFalling())
+    {
+        return;
+    }
+
+    /*
+     * 마지막 이동 입력 방향을 가져옵니다.
+     * 이동 중이라면 WASD 입력 방향으로 회피합니다.
+     */
+    FVector DodgeDirection =
+        GetLastMovementInputVector();
+
+    // 수평 방향으로만 회피하도록 높이값을 제거합니다.
+    DodgeDirection.Z = 0.0f;
+    DodgeDirection = DodgeDirection.GetSafeNormal();
+
+    /*
+     * 이동 입력이 없는 정지 상태라면
+     * 캐릭터가 바라보는 방향으로 회피합니다.
+     */
+    if (DodgeDirection.IsNearlyZero())
+    {
+        DodgeDirection = GetActorForwardVector();
+        DodgeDirection.Z = 0.0f;
+        DodgeDirection.Normalize();
+    }
+
+    // 회피 방향으로 캐릭터 몸을 돌립니다.
+    const FRotator DodgeRotation(
+        0.0f,
+        DodgeDirection.Rotation().Yaw,
+        0.0f
+    );
+
+    SetActorRotation(DodgeRotation);
+
+    // 쿨다운이 끝날 때까지 추가 회피를 막습니다.
+    bCanDodge = false;
+
+    // 캐릭터를 회피 방향으로 밀어냅니다.
+    LaunchCharacter(
+        DodgeDirection * DodgeStrength,
+        true,
+        false
+    );
+
+    // DodgeCooldown초 후 ResetDodge()를 실행합니다.
+    GetWorldTimerManager().SetTimer(
+        DodgeCooldownTimer,
+        this,
+        &APMCharacter::ResetDodge,
+        DodgeCooldown,
+        false
+    );
+}
+
+void APMCharacter::ResetDodge()
+{
+    bCanDodge = true;
 }

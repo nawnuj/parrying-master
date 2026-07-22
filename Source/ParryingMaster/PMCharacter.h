@@ -3,13 +3,14 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
+#include "TimerManager.h"
 #include "PMCharacter.generated.h"
 
 // 아래 클래스들이 존재한다고 미리 알려주는 선언입니다.
 class UCameraComponent;
 class USpringArmComponent;
 class UInputAction;
-class UInputMappingContext;
+class UInputMappingContext; 
 
 UCLASS()
 class PARRYINGMASTER_API APMCharacter : public ACharacter
@@ -87,6 +88,14 @@ protected:
     )
     TObjectPtr<UInputAction> SprintAction;
 
+    // IA_Dodge를 연결할 자리입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
+    TObjectPtr<UInputAction> DodgeAction;
+
     // 기본 걷기 속도입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -114,6 +123,24 @@ protected:
     )
     float MouseSensitivity = 0.3f;
 
+    // 캐릭터가 회피할 때 앞으로 밀려나는 힘입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Dodge",
+        meta = (ClampMin = "0.0")
+    )
+    float DodgeStrength = 700.0f;
+
+    // 회피를 다시 사용할 수 있을 때까지의 시간입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Dodge",
+        meta = (ClampMin = "0.0")
+    )
+    float DodgeCooldown = 0.6f;
+
 private:
     // WASD 입력을 처리합니다.
     void Move(const FInputActionValue& Value);
@@ -123,4 +150,16 @@ private:
 
     void StartSprint();
     void StopSprint();
+
+    // 회피 입력을 처리합니다.
+    void Dodge();
+
+    // 쿨다운이 끝나면 다시 회피할 수 있게 합니다.
+    void ResetDodge();
+
+    // 현재 회피를 사용할 수 있는지 나타냅니다.
+    bool bCanDodge = true;
+
+    // 회피 쿨다운을 관리하는 타이머입니다.
+    FTimerHandle DodgeCooldownTimer;
 };
