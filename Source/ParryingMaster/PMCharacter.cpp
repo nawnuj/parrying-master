@@ -209,6 +209,17 @@ void APMCharacter::SetupPlayerInputComponent(
             &APMCharacter::Dodge
         );
     }
+
+    // 마우스 왼쪽 버튼을 누르면 공격을 시도합니다.
+    if (AttackAction)
+    {
+        EnhancedInputComponent->BindAction(
+            AttackAction,
+            ETriggerEvent::Started,
+            this,
+            &APMCharacter::Attack
+        );
+    }
 }
 
 void APMCharacter::Move(const FInputActionValue& Value)
@@ -351,4 +362,53 @@ void APMCharacter::Dodge()
 void APMCharacter::ResetDodge()
 {
     bCanDodge = true;
+}
+
+void APMCharacter::Attack()
+{
+    // 이미 공격 중이면 추가 공격 입력을 무시합니다.
+    if (bIsAttacking)
+    {
+        return;
+    }
+
+    // 공중에서는 공격하지 못하게 합니다.
+    if (GetCharacterMovement()->IsFalling())
+    {
+        return;
+    }
+
+    // 공격 몽타주가 연결되지 않았다면 실행하지 않습니다.
+    if (!AttackMontage)
+    {
+        return;
+    }
+
+    /*
+     * 몽타주를 재생하고 재생 시간을 반환받습니다.
+     * 재생에 실패하면 0 이하의 값이 반환됩니다.
+     */
+    const float MontageDuration =
+        PlayAnimMontage(AttackMontage);
+
+    if (MontageDuration <= 0.0f)
+    {
+        return;
+    }
+
+    bIsAttacking = true;
+
+    // 몽타주 재생이 끝나면 공격 상태를 해제합니다.
+    GetWorldTimerManager().SetTimer(
+        AttackTimer,
+        this,
+        &APMCharacter::ResetAttack,
+        MontageDuration,
+        false
+    );
+}
+
+void APMCharacter::ResetAttack()
+{
+    bIsAttacking = false;
 }

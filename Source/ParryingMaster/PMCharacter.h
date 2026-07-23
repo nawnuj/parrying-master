@@ -11,6 +11,7 @@ class UCameraComponent;
 class USpringArmComponent;
 class UInputAction;
 class UInputMappingContext; 
+class UAnimMontage;
 
 UCLASS()
 class PARRYINGMASTER_API APMCharacter : public ACharacter
@@ -96,6 +97,22 @@ protected:
     )
     TObjectPtr<UInputAction> DodgeAction;
 
+    // IA_Attack을 연결할 자리입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
+    TObjectPtr<UInputAction> AttackAction;
+
+    // 공격할 때 재생할 애니메이션 몽타주입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat"
+    )
+    TObjectPtr<UAnimMontage> AttackMontage;
+
     // 기본 걷기 속도입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -141,6 +158,7 @@ protected:
     )
     float DodgeCooldown = 0.6f;
 
+
 private:
     // WASD 입력을 처리합니다.
     void Move(const FInputActionValue& Value);
@@ -157,9 +175,21 @@ private:
     // 쿨다운이 끝나면 다시 회피할 수 있게 합니다.
     void ResetDodge();
 
+    // 기본 공격을 시작합니다.
+    void Attack();
+
+    // 공격 애니메이션이 끝나면 호출됩니다.
+    void ResetAttack();
+
     // 현재 회피를 사용할 수 있는지 나타냅니다.
     bool bCanDodge = true;
 
+    // 현재 공격 중인지 나타냅니다.
+    bool bIsAttacking = false;
+
     // 회피 쿨다운을 관리하는 타이머입니다.
     FTimerHandle DodgeCooldownTimer;
+
+    // 공격 입력 연속 실행을 방지하는 타이머입니다.
+    FTimerHandle AttackTimer;
 };
