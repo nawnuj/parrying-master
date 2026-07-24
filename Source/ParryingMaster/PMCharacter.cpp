@@ -6,6 +6,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "PMHealthComponent.h"
 
 APMCharacter::APMCharacter()
 {
@@ -70,7 +71,13 @@ APMCharacter::APMCharacter()
      * 카메라가 직접 마우스 회전을 적용받는 것은 끕니다.
      * CameraBoom이 회전하므로 카메라는 같이 움직입니다.
      */
+    
     FollowCamera->bUsePawnControlRotation = false;
+
+    HealthComponent =
+        CreateDefaultSubobject<UPMHealthComponent>(
+            TEXT("HealthComponent")
+        );
 }
 
 void APMCharacter::BeginPlay()
@@ -109,6 +116,14 @@ void APMCharacter::BeginPlay()
         InputSubsystem->AddMappingContext(
             DefaultMappingContext,
             0
+        );
+    }
+
+    if (HealthComponent)
+    {
+        HealthComponent->OnDeath.AddDynamic(
+            this,
+            &APMCharacter::HandleDeath
         );
     }
 }
@@ -411,4 +426,25 @@ void APMCharacter::Attack()
 void APMCharacter::ResetAttack()
 {
     bIsAttacking = false;
+}
+
+void APMCharacter::HandleDeath()
+{
+    // 사망하면 이동을 정지합니다.
+    GetCharacterMovement()->DisableMovement();
+
+    APlayerController* PlayerController =
+        Cast<APlayerController>(Controller);
+
+    if (PlayerController)
+    {
+        // 플레이어 입력을 비활성화합니다.
+        DisableInput(PlayerController);
+    }
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Player input and movement disabled.")
+    );
 }

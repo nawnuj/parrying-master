@@ -12,6 +12,7 @@ class USpringArmComponent;
 class UInputAction;
 class UInputMappingContext; 
 class UAnimMontage;
+class UPMHealthComponent;
 
 UCLASS()
 class PARRYINGMASTER_API APMCharacter : public ACharacter
@@ -158,6 +159,14 @@ protected:
     )
     float DodgeCooldown = 0.6f;
 
+    // 플레이어의 체력을 관리하는 컴포넌트입니다.
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Health"
+    )
+    TObjectPtr<UPMHealthComponent> HealthComponent;
+
 
 private:
     // WASD 입력을 처리합니다.
@@ -192,4 +201,8 @@ private:
 
     // 공격 입력 연속 실행을 방지하는 타이머입니다.
     FTimerHandle AttackTimer;
+
+    // 체력이 0이 되었을 때 호출됩니다.
+    UFUNCTION()
+    void HandleDeath();
 };
