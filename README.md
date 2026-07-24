@@ -22,7 +22,7 @@
 - [x] 달리기
 - [x] 회피 구르기
 - [x] 기본 공격
-- [ ] 체력 및 피해 시스템
+- [x] 체력 및 피해 시스템
 - [ ] 패링
 - [ ] 적 AI
 
@@ -41,16 +41,37 @@
 
 ```text
 Content/
+├─ Animations/
+│  └─ Player/
 ├─ Blueprints/
 │  ├─ Characters/
-│  └─ GameModes/
+│  ├─ GameModes/
+│  └─ Testing/
 ├─ Input/
 └─ Maps/
 
 Source/
 └─ ParryingMaster/
    ├─ PMCharacter.h
-   └─ PMCharacter.cpp
+   ├─ PMCharacter.cpp
+   ├─ PMHealthComponent.h
+   └─ PMHealthComponent.cpp
+
+Docs/
+├─ DEVLOG.md
+├─ TROUBLESHOOTING.md
+└─ SCREENSHOTS/
+
+
+## 핵심 클래스
+
+| 클래스 | 역할 |
+|---|---|
+| `APMCharacter` | 플레이어 이동, 카메라, 점프, 달리기, 회피 및 공격 입력 처리 |
+| `UPMHealthComponent` | 최대 체력, 현재 체력, 피해 및 사망 상태 관리 |
+| `BP_PMCharacter` | 플레이어 메시, 애니메이션 및 입력 에셋 연결 |
+| `BP_ParryingGameMode` | 기본 플레이어 캐릭터 설정 |
+| `BP_DamageZone` | 체력 및 사망 기능을 검사하기 위한 테스트용 피해 구역 |
 
 ## 개발 기록
 
@@ -59,15 +80,13 @@ Source/
 - 📘 [개발 일지](Docs/DEVLOG.md)
 - 🛠️ [문제 해결 기록](Docs/TROUBLESHOOTING.md)
 
+
 ## 향후 계획
 
-- [x] 기본 이동 및 카메라 구현
-- [x] 달리기 구현
-- [x] 회피 구르기 구현
-- [x] 기본 근접 공격 구현
 - [ ] 공격 애니메이션 타격 시점에 공격 판정 추가
+- [ ] 테스트용 적 캐릭터에 체력 컴포넌트 적용
 - [ ] 한 번의 공격으로 같은 대상에게 한 번만 피해 적용
-- [ ] 체력 컴포넌트 구현
-- [ ] 적 캐릭터 및 공격 구현
-- [ ] 회피 및 공격 애니메이션 개선
+- [ ] 플레이어 체력 UI 구현
+- [ ] 피격 및 사망 애니메이션 연결
+- [ ] 회피 애니메이션 개선
 - [ ] 패링 판정 구현
