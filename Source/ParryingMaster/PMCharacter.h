@@ -13,6 +13,7 @@ class UInputAction;
 class UInputMappingContext; 
 class UAnimMontage;
 class UPMHealthComponent;
+struct FBranchingPointNotifyPayload;
 
 UCLASS()
 class PARRYINGMASTER_API APMCharacter : public ACharacter
@@ -114,6 +115,33 @@ protected:
     )
     TObjectPtr<UAnimMontage> AttackMontage;
 
+    // 한 번의 기본 공격으로 주는 피해량입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat",
+        meta = (ClampMin = "0.0")
+    )
+    float AttackDamage = 20.0f;
+
+    // 캐릭터 앞쪽으로 검사할 공격 거리입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat",
+        meta = (ClampMin = "0.0")
+    )
+    float AttackRange = 150.0f;
+
+    // 공격 판정으로 사용하는 구체의 크기입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat",
+        meta = (ClampMin = "0.0")
+    )
+    float AttackRadius = 50.0f;
+
     // 기본 걷기 속도입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -189,6 +217,16 @@ private:
 
     // 공격 애니메이션이 끝나면 호출됩니다.
     void ResetAttack();
+
+    // 공격 몽타주의 Notify가 발생했을 때 호출됩니다.
+    UFUNCTION()
+    void HandleMontageNotifyBegin(
+        FName NotifyName,
+        const FBranchingPointNotifyPayload& BranchingPointPayload
+    );
+
+    // 캐릭터 앞쪽을 검사하고 대상에게 피해를 줍니다.
+    void PerformAttackTrace();
 
     // 현재 회피를 사용할 수 있는지 나타냅니다.
     bool bCanDodge = true;

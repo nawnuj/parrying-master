@@ -7,6 +7,10 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "PMHealthComponent.h"
+#include "Animation/AnimInstance.h"
+#include "DrawDebugHelpers.h"
+#include "GameFramework/DamageType.h"
+#include "Kismet/GameplayStatics.h"
 
 APMCharacter::APMCharacter()
 {
@@ -124,6 +128,21 @@ void APMCharacter::BeginPlay()
         HealthComponent->OnDeath.AddDynamic(
             this,
             &APMCharacter::HandleDeath
+        );
+    }
+
+    UAnimInstance* AnimInstance =
+        GetMesh()->GetAnimInstance();
+
+    if (AnimInstance)
+    {
+        /*
+         * 공격 몽타주에서 Montage Notify가 발생하면
+         * HandleMontageNotifyBegin()을 실행합니다.
+         */
+        AnimInstance->OnPlayMontageNotifyBegin.AddDynamic(
+            this,
+            &APMCharacter::HandleMontageNotifyBegin
         );
     }
 }
@@ -446,5 +465,144 @@ void APMCharacter::HandleDeath()
         LogTemp,
         Warning,
         TEXT("Player input and movement disabled.")
+    );
+}
+
+void APMCharacter::HandleMontageNotifyBegin(
+    FName NotifyName,
+    const FBranchingPointNotifyPayload& BranchingPointPayload
+)
+{
+    /*
+     * 현재는 Payload를 사용하지 않습니다.
+     * 사용하지 않는 매개변수라는 것을 명시합니다.
+     */
+    (void)BranchingPointPayload;
+
+    /*
+     * AttackHit이라는 이름의 Notify이고
+     * 실제 공격 중일 때만 공격 판정을 실행합니다.
+     */
+    if (
+        NotifyName == TEXT("AttackHit")
+        && bIsAttacking
+        )
+    {
+        PerformAttackTrace();
+    }
+}
+
+void APMCharacter::PerformAttackTrace()
+{
+    const FVector ForwardDirection =
+        GetActorForwardVector();
+
+    /*
+     * 캐릭터 중심보다 약간 앞쪽과 위쪽에서
+     * 공격 범위 검사를 시작합니다.
+     */
+    const FVector TraceStart =
+        GetActorLocation()
+        + FVector(0.0f, 0.0f, 50.0f)
+        + ForwardDirection * 50.0f;
+
+    const FVector TraceEnd =
+        TraceStart
+        + ForwardDirection * AttackRange;
+
+    TArray<FHitResult> HitResults;
+
+    FCollisionQueryParams QueryParams;
+
+    // 자기 자신은 공격 판정에서 제외합니다.
+    QueryParams.AddIgnoredActor(this);
+
+    const FCollisionShape AttackShape =
+        FCollisionShape::MakeSphere(AttackRadius);
+
+    /*
+     * TraceStart에서 TraceEnd까지 구체를 이동시키며
+     * 충돌한 모든 액터를 찾습니다.
+     */
+    const bool bHit =
+        GetWorld()->SweepMultiByChannel(
+            HitResults,
+            TraceStart,
+            TraceEnd,
+            FQuat::Identity,
+            ECC_Visibility,
+            AttackShape,
+            QueryParams
+        );
+
+    /*
+     * 하나의 액터가 여러 컴포넌트로 감지되더라도
+     * 피해는 한 번만 주기 위해 Set을 사용합니다.
+     */
+    TSet<AActor*> DamagedActors;
+
+    if (bHit)
+    {
+        for (const FHitResult& HitResult : HitResults)
+        {
+            AActor* HitActor =
+                HitResult.GetActor();
+
+            if (!HitActor)
+            {
+                continue;
+            }
+
+            if (DamagedActors.Contains(HitActor))
+            {
+                continue;
+            }
+
+            /*
+             * HealthComponent가 없는 벽이나 바닥에는
+             * 피해를 적용하지 않습니다.
+             */
+            UPMHealthComponent* TargetHealth =
+                HitActor->FindComponentByClass<
+                UPMHealthComponent
+                >();
+
+            if (!TargetHealth)
+            {
+                continue;
+            }
+
+            DamagedActors.Add(HitActor);
+
+            UGameplayStatics::ApplyDamage(
+                HitActor,
+                AttackDamage,
+                GetController(),
+                this,
+                UDamageType::StaticClass()
+            );
+        }
+    }
+
+    // 공격 판정의 방향과 끝 지점을 1초간 표시합니다.
+    DrawDebugLine(
+        GetWorld(),
+        TraceStart,
+        TraceEnd,
+        FColor::Yellow,
+        false,
+        1.0f,
+        0,
+        2.0f
+    );
+
+    DrawDebugSphere(
+        GetWorld(),
+        TraceEnd,
+        AttackRadius,
+        16,
+        bHit ? FColor::Green : FColor::Red,
+        false,
+        1.0f
     );
 }
