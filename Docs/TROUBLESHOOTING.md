@@ -91,3 +91,33 @@ BP_DamageZone
 - 판정용 컴포넌트와 시각적 표시용 컴포넌트를 분리할 수 있다.
 - 테스트용 액터는 기능뿐 아니라 위치와 범위를 쉽게 확인할 수 있도록 시각화하는 것이 좋다.
 - 테스트 메시의 충돌을 끄면 실제 판정 컴포넌트와 충돌이 중복되는 것을 방지할 수 있다.
+
+---
+
+## Progress Bar 위치와 크기 설정이 보이지 않는 문제
+
+### 발생 시점
+1주차 6일차 체력 HUD를 설정하는 과정에서 발생했다.
+
+### 증상
+
+`WBP_HUD`에서 `PlayerHealthBar`를 선택했지만 위치 X/Y와 크기 X/Y 설정이 표시되지 않았다.
+
+### 원인
+
+`PlayerHealthBar`가 Canvas Panel 없이 위젯의 Root로 직접 배치되어 있었다.
+
+Canvas Panel의 자식이 아니었기 때문에 `Canvas Panel Slot`의 위치와 크기 설정을 사용할 수 없었다.
+
+### 해결 방법
+
+`PlayerHealthBar`를 Canvas Panel로 감싸 계층구조를 다음과 같이 변경했다.
+
+```text
+WBP_HUD
+└─ Canvas Panel
+   └─ PlayerHealthBar
+
+### 배운 점
+- 위젯의 위치와 크기 설정은 부모 패널의 Slot 타입에 따라 달라진다.
+- 자유로운 위치 배치가 필요할 때는 Canvas Panel을 사용할 수 있다.
