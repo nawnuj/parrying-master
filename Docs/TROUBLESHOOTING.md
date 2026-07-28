@@ -121,3 +121,37 @@ WBP_HUD
 ### 배운 점
 - 위젯의 위치와 크기 설정은 부모 패널의 Slot 타입에 따라 달라진다.
 - 자유로운 위치 배치가 필요할 때는 Canvas Panel을 사용할 수 있다.
+
+---
+
+## 적 캐릭터가 공격 Trace에 감지되지 않는 문제
+
+### 발생 시점
+
+2주차 1일차 적 캐릭터 충돌 설정 과정에서 발생했다.
+
+### 증상
+
+- 적 Capsule의 세부 설정에서 예상한 형태의 Visibility = Block 항목을 바로 찾기 어려웠다.
+- 기본 Pawn 프리셋에서 Visibility가 Ignore로 설정되어 있었다.
+
+### 원인
+
+플레이어의 근접 공격 판정은 Visibility Trace 채널을 사용한다.
+
+하지만 적 Capsule의 기본 Pawn 콜리전 프리셋에서는 Visibility 응답이 Ignore로 설정되어 있어 공격 Trace가 적을 감지할 수 없었다.
+
+### 해결 방법
+
+BP_EnemyCharacter의 Capsule Component에서 콜리전 프리셋을 Custom으로 변경하고 다음 값을 설정했다.
+
+```text
+- Collision Enabled = Query and Physics
+- Object Type = Pawn
+- Visibility = Block
+
+### 배운 점
+- Trace가 사용하는 채널과 대상의 Collision Response가 일치해야 한다.
+- Visibility가 Ignore이면 해당 채널을 사용하는 Trace에 감지되지 않는다.
+- 기본 콜리전 프리셋의 개별 채널을 수정하려면 Custom 프리셋으로 변경해야 한다.
+- 충돌 반응 표는 왼쪽부터 Ignore, Overlap, Block 순서로 표시된다.

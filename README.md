@@ -16,6 +16,8 @@
 
 ## 현재 구현된 기능
 
+### 플레이어
+
 - [x] 3인칭 캐릭터 이동
 - [x] 마우스 카메라 회전
 - [x] 점프
@@ -26,12 +28,29 @@
 - [x] 피해 처리 및 사망 이벤트
 - [x] 사망 후 플레이어 이동 및 입력 제한
 - [x] 플레이어 체력 HUD
+- [ ] 피격 및 사망 애니메이션
+- [ ] 패링
+
+### 적
+
+- [x] 기본 적 캐릭터 C++ 클래스
+- [x] 적 캐릭터 메시와 애니메이션 블루프린트 연결
+- [x] 적 체력 컴포넌트 적용
+- [x] 플레이어 공격으로 적 피해 처리
+- [x] 적 체력이 0일 때 이동 및 충돌 비활성화
+- [x] 적 사망 후 자동 제거
+- [ ] 플레이어 추적 AI
+- [ ] 적 공격 애니메이션
+- [ ] 적 근접 공격 판정
+- [ ] 적 피격 및 경직 애니메이션
+
+### 기타
+
 - [x] 테스트용 피해 구역
 - [x] 체력과 사망 기능을 가진 테스트 더미
 - [x] 기본 공격 판정 및 피해 적용
 - [x] 테스트 더미 공격 및 사망 테스트
-- [ ] 피격 및 사망 애니메이션
-- [ ] 패링
+
 
 ## 조작 방법
 
@@ -52,13 +71,16 @@ Content/
 │  └─ Player/
 ├─ Blueprints/
 │  ├─ Characters/
+│  │  └─ BP_PMCharacter
 │  ├─ Enemies/
-│  │  └─ BP_TestDummy
+│  │  ├─ BP_TestDummy
+│  │  └─ BP_EnemyCharacter
 │  ├─ GameModes/
 │  └─ Testing/
 │     └─ BP_DamageZone
 ├─ Input/
 ├─ Maps/
+│  └─ L_TestMovement
 └─ UI/
    └─ WBP_HUD
 
@@ -66,6 +88,8 @@ Source/
 └─ ParryingMaster/
    ├─ PMCharacter.h
    ├─ PMCharacter.cpp
+   ├─ PMEnemyCharacter.h
+   ├─ PMEnemyCharacter.cpp
    ├─ PMHealthComponent.h
    └─ PMHealthComponent.cpp
 
@@ -74,18 +98,20 @@ Docs/
 ├─ TROUBLESHOOTING.md
 └─ SCREENSHOTS/
 
-
 ## 핵심 클래스 및 블루프린트
 
 | 이름 | 역할 |
 |---|---|
-| `APMCharacter` | 이동, 카메라, 점프, 달리기, 회피 및 공격 입력 처리 |
-| `UPMHealthComponent` | 최대 체력, 현재 체력, 피해 및 사망 상태 관리 |
-| `BP_PMCharacter` | 플레이어 메시, 애니메이션, 입력 에셋 및 HUD 생성 |
+| `APMCharacter` | 이동, 카메라, 점프, 달리기, 회피, 공격 입력 및 근접 공격 판정 처리 |
+| `UPMHealthComponent` | 플레이어와 적의 최대 체력, 현재 체력, 피해 및 사망 상태 관리 |
+| `APMEnemyCharacter` | 적 캐릭터의 체력, 이동 설정 및 사망 처리 |
+| `BP_PMCharacter` | 플레이어 메시, 애니메이션, 입력 에셋 및 HUD 연결 |
+| `BP_EnemyCharacter` | 적 메시, 애니메이션, 체력 및 충돌 설정 |
 | `BP_ParryingGameMode` | 기본 플레이어 캐릭터 설정 |
+| `AM_Player_Attack_01` | 기본 공격 애니메이션과 타격 시점 Notify 관리 |
 | `WBP_HUD` | 플레이어의 현재 체력을 Progress Bar로 표시 |
-| `BP_DamageZone` | 체력과 사망 기능을 검사하는 테스트용 피해 구역 |
-| `BP_TestDummy` | 체력 컴포넌트와 사망 처리를 가진 테스트용 대상 |
+| `BP_DamageZone` | 플레이어의 체력 및 사망 기능 테스트 |
+| `BP_TestDummy` | 플레이어 공격의 판정, 피해 및 사망 처리 테스트 |
 
 ## 1주차 완료 결과
 
@@ -107,7 +133,7 @@ Docs/
 - [ ] 플레이어 사망 후 레벨 재시작
 - [ ] 회피 애니메이션과 무적 시간
 - [ ] 공격 애니메이션 및 Root Motion 개선
-- [ ] 기본 적 캐릭터와 공격 패턴
+- [ ] 기본 적 캐릭터의 공격 패턴
 - [ ] 적 추적 및 공격 AI
 - [ ] 방어 및 패링 입력
 - [ ] 패링 성공 판정과 적 경직
