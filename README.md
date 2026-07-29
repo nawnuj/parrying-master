@@ -39,7 +39,9 @@
 - [x] 플레이어 공격으로 적 피해 처리
 - [x] 적 체력이 0일 때 이동 및 충돌 비활성화
 - [x] 적 사망 후 자동 제거
-- [ ] 플레이어 추적 AI
+- [x] 플레이어 추적 AI
+- [x] NavMesh 기반 경로 이동
+- [x] 적 이동 및 정지 애니메이션
 - [ ] 적 공격 애니메이션
 - [ ] 적 근접 공격 판정
 - [ ] 적 피격 및 경직 애니메이션
@@ -68,6 +70,8 @@
 ```text
 Content/
 ├─ Animations/
+│  ├─ Enemies/
+│  │  └─ ABP_Enemy
 │  └─ Player/
 ├─ Blueprints/
 │  ├─ Characters/
@@ -88,6 +92,8 @@ Source/
 └─ ParryingMaster/
    ├─ PMCharacter.h
    ├─ PMCharacter.cpp
+   ├─ PMEnemyAIController.h
+   ├─ PMEnemyAIController.cpp
    ├─ PMEnemyCharacter.h
    ├─ PMEnemyCharacter.cpp
    ├─ PMHealthComponent.h
@@ -98,15 +104,18 @@ Docs/
 ├─ TROUBLESHOOTING.md
 └─ SCREENSHOTS/
 
+```
 ## 핵심 클래스 및 블루프린트
 
 | 이름 | 역할 |
 |---|---|
 | `APMCharacter` | 이동, 카메라, 점프, 달리기, 회피, 공격 입력 및 근접 공격 판정 처리 |
 | `UPMHealthComponent` | 플레이어와 적의 최대 체력, 현재 체력, 피해 및 사망 상태 관리 |
-| `APMEnemyCharacter` | 적 캐릭터의 체력, 이동 설정 및 사망 처리 |
+| `APMEnemyCharacter` | 적 캐릭터의 체력, 이동 설정, AI Controller 연결 및 사망 처리 |
+| `APMEnemyAIController` | 플레이어 탐색, NavMesh 경로 요청 및 추적 이동 처리 |
 | `BP_PMCharacter` | 플레이어 메시, 애니메이션, 입력 에셋 및 HUD 연결 |
-| `BP_EnemyCharacter` | 적 메시, 애니메이션, 체력 및 충돌 설정 |
+| `BP_EnemyCharacter` | 적 메시, 애니메이션, 체력, 충돌 및 AI 설정 |
+| `ABP_Enemy` | 적의 실제 이동 속도를 이용한 Idle 및 Walk 애니메이션 전환 |
 | `BP_ParryingGameMode` | 기본 플레이어 캐릭터 설정 |
 | `AM_Player_Attack_01` | 기본 공격 애니메이션과 타격 시점 Notify 관리 |
 | `WBP_HUD` | 플레이어의 현재 체력을 Progress Bar로 표시 |
@@ -118,6 +127,14 @@ Docs/
 플레이어가 테스트 맵에서 이동·점프·달리기·회피·공격할 수 있으며, 공격 애니메이션의 타격 시점에 테스트 더미를 감지하고 피해를 적용할 수 있다.
 
 테스트 더미는 체력이 0이 되면 사망 처리되며, 플레이어는 피해 구역을 통해 체력 감소, HUD 갱신 및 사망 상태를 테스트할 수 있다.
+
+## 2주차 진행 상황
+
+기존 체력 시스템을 재사용하는 기본 적 캐릭터를 구현하고, 플레이어 공격으로 피해를 받아 사망하도록 연결했다.
+
+적 AI Controller와 NavMesh 경로 이동을 추가하여 적이 플레이어를 추적하고 일정 거리에서 멈추도록 구현했다. 적 전용 Animation Blueprint는 실제 이동 속도를 기준으로 Idle과 Walk 상태를 전환한다.
+
+현재 적은 플레이어를 추적할 수 있지만 공격 기능은 없으며, 다음 단계에서 공격 거리 판정과 공격 애니메이션을 구현할 예정이다.
 
 ## 개발 기록
 

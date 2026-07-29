@@ -47,6 +47,7 @@ CameraBoom
 FollowCamera
 - Use Pawn Control Rotation: Off
 
+```
 
 ### 배운 점
 
@@ -86,6 +87,8 @@ BP_DamageZone
 ├─ Box Collision
 └─ DamageZoneMesh
 
+```
+
 ### 배운 점 
 - Collision Component는 판정을 담당하지만 게임 화면에 자동으로 표시되지 않는다.
 - 판정용 컴포넌트와 시각적 표시용 컴포넌트를 분리할 수 있다.
@@ -118,6 +121,7 @@ WBP_HUD
 └─ Canvas Panel
    └─ PlayerHealthBar
 
+```
 ### 배운 점
 - 위젯의 위치와 크기 설정은 부모 패널의 Slot 타입에 따라 달라진다.
 - 자유로운 위치 배치가 필요할 때는 Canvas Panel을 사용할 수 있다.
@@ -150,8 +154,83 @@ BP_EnemyCharacter의 Capsule Component에서 콜리전 프리셋을 Custom으로
 - Object Type = Pawn
 - Visibility = Block
 
+```
+
 ### 배운 점
 - Trace가 사용하는 채널과 대상의 Collision Response가 일치해야 한다.
 - Visibility가 Ignore이면 해당 채널을 사용하는 Trace에 감지되지 않는다.
 - 기본 콜리전 프리셋의 개별 채널을 수정하려면 Custom 프리셋으로 변경해야 한다.
 - 충돌 반응 표는 왼쪽부터 Ignore, Overlap, Block 순서로 표시된다.
+
+---
+
+## 적 AI가 Idle 자세로 미끄러지는 문제
+
+### 발생 시점
+
+2주차 2일차 플레이어 추적 AI와 이동 애니메이션을 연결하는 과정에서 발생했다.
+
+### 증상
+
+- 적이 NavMesh 경로를 따라 플레이어를 정상적으로 추적했다.
+- 적 캐릭터의 위치와 방향은 정상적으로 변경되었다.
+- 이동 중에도 Idle 자세가 유지되어 바닥 위를 미끄러지는 것처럼 보였다.
+- 플레이어 캐릭터에서는 동일한 Skeletal Mesh와 Animation Blueprint로 걷기 애니메이션이 정상적으로 재생되었다.
+
+### 조사
+
+`BP_EnemyCharacter`의 애니메이션 설정을 확인한 결과 다음 연결은 정상적이었다.
+
+```text
+- Skeletal Mesh Asset = SKM_Manny_Simple
+- Animation Mode = Use Animation Blueprint
+- Anim Class = ABP_Unarmed
+
+```
+
+적의 Max Walk Speed와 NavMesh 이동도 정상적으로 작동했다.
+
+ABP_Unarmed의 Should Move 계산을 확인한 결과 실제 지면 속도와 현재 가속도를 모두 검사하고 있었다.
+Ground Speed > 0.01
+and
+Current Acceleration != 0
+→ Should Move
+플레이어 입력 이동은 가속도 조건을 충족하지만 AI의 경로 이동은 동일한 방식으로 입력 가속도를 만들지 않아 Should Move가 false로 유지되었다.
+
+### 원인
+
+플레이어와 적이 동일한 Animation Blueprint를 사용했지만 이동 방식이 서로 달랐다.
+
+플레이어는 이동 입력을 통해 가속도가 발생한 반면, 적은 MoveToActor()의 경로 요청으로 이동했다. 기존 ABP_Unarmed가 플레이어 입력 가속도를 이동 상태 전환 조건으로 사용했기 때문에 적의 실제 속도가 존재해도 Walk 상태로 전환되지 않았다.
+
+### 해결 방법
+
+플레이어용 ABP_Unarmed를 복제하여 적 전용 ABP_Enemy를 생성했다. (Content/Animations/Enemies/ABP_Enemy)
+
+ABP_Enemy의 Should Move 조건에서 현재 가속도 검사를 제거하고, 실제 지면 속도만 검사하도록 변경했다.
+
+변경 전:
+Ground Speed > 0.01
+and 
+Current Acceleration != 0
+→ Should Move
+
+변경 후:
+Ground Speed > 0.01
+→ Should Move
+
+BP_EnemyCharacter의 Animation Class도 다음과 같이 변경했다.
+
+```text
+- Animation Mode = Use Animation Blueprint
+- Anim Class = ABP_Enemy
+
+```
+
+### 배운 점 
+
+- 같은 Animation Blueprint를 사용해도 플레이어 입력 이동과 AI 경로 이동에서 제공되는 값은 다를 수 있다.
+- 실제 위치가 변하는 것과 Animation Blueprint가 이동 상태로 판단하는 것은 별개의 과정이다.
+- AI 이동 애니메이션은 입력 가속도보다 실제 속도를 기준으로 판단하는 것이 안전하다.
+- 공통 Animation Blueprint를 직접 수정하기보다 용도별 복제본을 만들면 기존 캐릭터에 미치는 영향을 줄일 수 있다.
+- 애니메이션 문제를 조사할 때 Mesh, Anim Class, 이동 속도 및 상태 전환 조건을 분리해서 확인해야 한다.

@@ -360,3 +360,66 @@ Parrying Master의 기능 구현 과정과 테스트 결과를 기록합니다.
 - 적 피격 및 사망 애니메이션이 아직 없다.
 - 적 체력은 별도의 UI로 표시되지 않는다.
 - 다음 단계에서 플레이어를 탐지하고 추적하는 기본 AI를 구현할 예정이다.
+
+---
+
+## 2주차 2일차 — 플레이어 추적 AI
+
+### 목표
+
+기본 적 캐릭터에 AI Controller와 NavMesh 경로 이동을 연결하여 플레이어를 추적하고 일정 거리에서 멈추도록 구현한다.
+
+### 구현 내용
+
+- 프로젝트 모듈에 `AIModule`과 `NavigationSystem` 추가
+- `AAIController`를 상속하는 `APMEnemyAIController` C++ 클래스 생성
+- 첫 번째 플레이어 Pawn을 추적 대상으로 설정
+- `TWeakObjectPtr`를 이용한 추적 대상 참조 관리
+- `MoveToActor()`를 이용한 플레이어 추적 이동 구현
+- AI 경로 요청을 0.25초 간격으로 갱신
+- 플레이어와 150 거리 안에 도달하면 정지하도록 설정
+- `APMEnemyCharacter`에 AI Controller Class 연결
+- 월드에 배치되거나 스폰된 적에게 AI가 자동으로 빙의하도록 설정
+- AI 경로 이동에 가속도를 사용하도록 설정
+- 적 사망 시 진행 중인 이동 요청 중지
+- 적 사망 시 AI Controller Tick 비활성화
+- `L_TestMovement`에 `NavMeshBoundsVolume` 배치
+- 플레이어와 적 사이의 이동 가능 영역 생성
+- `P` 키를 이용한 NavMesh 영역 시각화 및 확인
+- `ABP_Unarmed`를 복제하여 적 전용 `ABP_Enemy` 생성
+- 적 Animation Blueprint의 이동 상태를 실제 지면 속도 기준으로 판단
+- `Should Move` 조건에서 플레이어 입력 가속도 의존성 제거
+- `BP_EnemyCharacter`에 `ABP_Enemy` 연결
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Acceptance Radius | 150 |
+| AI Tick Interval | 0.25초 |
+| Max Walk Speed | 250 |
+| Should Move Speed Threshold | 0.01 |
+| Auto Possess AI | Placed in World or Spawned |
+| AI Controller Class | PMEnemyAIController |
+
+### 테스트 결과
+
+- 게임을 시작하면 적 AI Controller가 적 캐릭터에 정상적으로 빙의한다.
+- 적이 NavMesh 영역 안에서 플레이어를 향해 이동한다.
+- 플레이어가 방향을 바꾸면 적도 이동 경로를 갱신한다.
+- 적이 플레이어와 약 150 거리 안에 도달하면 정지한다.
+- 플레이어가 멀어지면 적이 다시 추적을 시작한다.
+- 적이 이동할 때 Walk 애니메이션이 재생된다.
+- 적이 정지하면 Idle 애니메이션으로 돌아간다.
+- 적의 체력이 0이 되면 추적과 이동을 즉시 중단한다.
+- 사망한 적은 기존과 동일하게 2초 후 제거된다.
+- 기존 플레이어 이동, 회피, 공격, 피해 및 HUD 기능이 정상적으로 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 현재 적은 플레이어와의 거리에 관계없이 항상 추적을 시도한다.
+- 아직 AI Perception을 이용한 시야 및 탐지 범위가 없다.
+- 현재 이동 경로는 0.25초마다 반복해서 갱신한다.
+- 적의 공격 거리 판정과 공격 행동이 아직 없다.
+- 장애물 회피는 기본 NavMesh 경로 탐색에 의존한다.
+- 다음 단계에서 적 공격 거리 판정과 공격 애니메이션을 구현할 예정이다.
