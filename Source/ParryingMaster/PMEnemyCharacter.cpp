@@ -3,6 +3,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "PMHealthComponent.h"
+#include "PMEnemyAIController.h"
 
 APMEnemyCharacter::APMEnemyCharacter()
 {
@@ -12,9 +13,15 @@ APMEnemyCharacter::APMEnemyCharacter()
         TEXT("HealthComponent")
     );
 
+    AIControllerClass = APMEnemyAIController::StaticClass();
+
+    AutoPossessAI =
+        EAutoPossessAI::PlacedInWorldOrSpawned;
+
     GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
 
     GetCharacterMovement()->bOrientRotationToMovement = true;
+    GetCharacterMovement()->bRequestedMoveUseAcceleration = true;
     GetCharacterMovement()->RotationRate =
         FRotator(0.0f, 360.0f, 0.0f);
 
@@ -40,6 +47,13 @@ void APMEnemyCharacter::BeginPlay()
 
 void APMEnemyCharacter::HandleDeath()
 {
+    if (APMEnemyAIController* EnemyAIController =
+        Cast<APMEnemyAIController>(GetController()))
+    {
+        EnemyAIController->StopMovement();
+        EnemyAIController->SetActorTickEnabled(false);
+    }
+
     GetCharacterMovement()->DisableMovement();
 
     GetCapsuleComponent()->SetCollisionEnabled(

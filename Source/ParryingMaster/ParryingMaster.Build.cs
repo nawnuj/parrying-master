@@ -15,7 +15,9 @@ public class ParryingMaster : ModuleRules
 				"CoreUObject", 
 				"Engine", 
 				"InputCore",
-                "EnhancedInput"
+                "EnhancedInput",
+                "AIModule",
+                "NavigationSystem"
             }
 		);
 
