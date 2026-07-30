@@ -1,6 +1,7 @@
 #include "PMEnemyAIController.h"
 
 #include "Kismet/GameplayStatics.h"
+#include "PMEnemyCharacter.h"
 
 APMEnemyAIController::APMEnemyAIController()
 {
@@ -29,15 +30,34 @@ void APMEnemyAIController::Tick(float DeltaSeconds)
         TargetPawn = UGameplayStatics::GetPlayerPawn(this, 0);
     }
 
-    if (!TargetPawn.IsValid() || !GetPawn())
+    APMEnemyCharacter* EnemyCharacter =
+        Cast<APMEnemyCharacter>(GetPawn());
+
+    if (!TargetPawn.IsValid() || !EnemyCharacter)
     {
+        return;
+    }
+
+    const float DistanceToTarget = FVector::Dist2D(
+        EnemyCharacter->GetActorLocation(),
+        TargetPawn->GetActorLocation()
+    );
+
+    if (DistanceToTarget <= AcceptanceRadius)
+    {
+        StopMovement();
+
+        EnemyCharacter->TryAttack(
+            TargetPawn.Get()
+        );
+
         return;
     }
 
     MoveToActor(
         TargetPawn.Get(),
         AcceptanceRadius,
-        true,
+        false,
         true,
         true,
         nullptr,

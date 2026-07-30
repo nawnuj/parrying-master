@@ -4,6 +4,10 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "PMHealthComponent.h"
 #include "PMEnemyAIController.h"
+#include "Animation/AnimInstance.h"
+#include "DrawDebugHelpers.h"
+#include "GameFramework/DamageType.h"
+#include "Kismet/GameplayStatics.h"
 
 APMEnemyCharacter::APMEnemyCharacter()
 {
@@ -43,10 +47,29 @@ void APMEnemyCharacter::BeginPlay()
             &APMEnemyCharacter::HandleDeath
         );
     }
+
+    UAnimInstance* AnimInstance =
+        GetMesh()->GetAnimInstance();
+
+    if (AnimInstance)
+    {
+        AnimInstance->OnPlayMontageNotifyBegin.AddDynamic(
+            this,
+            &APMEnemyCharacter::HandleMontageNotifyBegin
+        );
+    }
 }
 
 void APMEnemyCharacter::HandleDeath()
 {
+    bCanAttack = false;
+    bIsAttacking = false;
+
+    GetWorldTimerManager().ClearTimer(
+        AttackCooldownTimer
+    );
+
+    StopAnimMontage(EnemyAttackMontage);
     if (APMEnemyAIController* EnemyAIController =
         Cast<APMEnemyAIController>(GetController()))
     {
@@ -65,4 +88,166 @@ void APMEnemyCharacter::HandleDeath()
     );
 
     SetLifeSpan(2.0f);
+}
+
+void APMEnemyCharacter::TryAttack(AActor* TargetActor)
+{
+    if (!bCanAttack || bIsAttacking || !TargetActor)
+    {
+        return;
+    }
+
+    if (HealthComponent && HealthComponent->IsDead())
+    {
+        return;
+    }
+
+    const float DistanceToTarget = FVector::Dist2D(
+        GetActorLocation(),
+        TargetActor->GetActorLocation()
+    );
+
+    if (DistanceToTarget > EnemyAttackRange)
+    {
+        return;
+    }
+
+    if (!EnemyAttackMontage)
+    {
+        return;
+    }
+
+    /*
+     * 공격 전에 플레이어 방향으로 회전합니다.
+     */
+    FVector Direction =
+        TargetActor->GetActorLocation() - GetActorLocation();
+
+    Direction.Z = 0.0f;
+
+    if (!Direction.IsNearlyZero())
+    {
+        const FRotator TargetRotation = Direction.Rotation();
+
+        SetActorRotation(
+            FRotator(0.0f, TargetRotation.Yaw, 0.0f)
+        );
+    }
+
+    CurrentAttackTarget = TargetActor;
+
+    const float MontageDuration =
+        PlayAnimMontage(EnemyAttackMontage);
+
+    if (MontageDuration <= 0.0f)
+    {
+        CurrentAttackTarget.Reset();
+        return;
+    }
+
+    bIsAttacking = true;
+    bCanAttack = false;
+
+    GetWorldTimerManager().SetTimer(
+        AttackCooldownTimer,
+        this,
+        &APMEnemyCharacter::ResetAttack,
+        EnemyAttackCooldown,
+        false
+    );
+}
+
+void APMEnemyCharacter::HandleMontageNotifyBegin(
+    FName NotifyName,
+    const FBranchingPointNotifyPayload& BranchingPointPayload
+)
+{
+    (void)BranchingPointPayload;
+
+    if (
+        NotifyName == FName(TEXT("EnemyAttackHit")) &&
+        bIsAttacking
+        )
+    {
+        PerformAttackTrace();
+    }
+}
+
+void APMEnemyCharacter::PerformAttackTrace()
+{
+    UWorld* World = GetWorld();
+
+    if (!World)
+    {
+        return;
+    }
+
+    const FVector Start =
+        GetActorLocation() + GetActorForwardVector() * 50.0f;
+
+    const FVector End =
+        GetActorLocation() +
+        GetActorForwardVector() * EnemyAttackRange;
+
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+
+    FCollisionObjectQueryParams ObjectQueryParams;
+    ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+
+    FHitResult HitResult;
+
+    const bool bHit = World->SweepSingleByObjectType(
+        HitResult,
+        Start,
+        End,
+        FQuat::Identity,
+        ObjectQueryParams,
+        FCollisionShape::MakeSphere(EnemyAttackRadius),
+        QueryParams
+    );
+
+    AActor* HitActor = HitResult.GetActor();
+
+    if (
+        bHit &&
+        HitActor &&
+        HitActor == CurrentAttackTarget.Get()
+        )
+    {
+        UGameplayStatics::ApplyDamage(
+            HitActor,
+            EnemyAttackDamage,
+            GetController(),
+            this,
+            UDamageType::StaticClass()
+        );
+    }
+
+    DrawDebugLine(
+        World,
+        Start,
+        End,
+        FColor::Yellow,
+        false,
+        0.5f
+    );
+
+    DrawDebugSphere(
+        World,
+        End,
+        EnemyAttackRadius,
+        16,
+        bHit ? FColor::Green : FColor::Red,
+        false,
+        0.5f
+    );
+}
+
+void APMEnemyCharacter::ResetAttack()
+{
+    bIsAttacking = false;
+    bCanAttack = true;
+
+    CurrentAttackTarget.Reset();
 }
