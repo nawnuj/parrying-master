@@ -2,6 +2,8 @@
 
 #include "Kismet/GameplayStatics.h"
 #include "PMEnemyCharacter.h"
+#include "GameFramework/Pawn.h"
+#include "PMHealthComponent.h"
 
 APMEnemyAIController::APMEnemyAIController()
 {
@@ -35,6 +37,32 @@ void APMEnemyAIController::Tick(float DeltaSeconds)
 
     if (!TargetPawn.IsValid() || !EnemyCharacter)
     {
+        return;
+    }
+
+    /*
+     * 플레이어 Pawn에 연결된 체력 컴포넌트를 찾습니다.
+     */
+    UPMHealthComponent* TargetHealthComponent =
+        TargetPawn->FindComponentByClass<UPMHealthComponent>();
+
+    /*
+     * 플레이어가 사망했다면 이동과 공격을 정리하고
+     * 더 이상 AI Tick을 실행하지 않습니다.
+     */
+    if (
+        TargetHealthComponent &&
+        TargetHealthComponent->IsDead()
+        )
+    {
+        StopMovement();
+
+        EnemyCharacter->StopCombat();
+
+        TargetPawn.Reset();
+
+        SetActorTickEnabled(false);
+
         return;
     }
 

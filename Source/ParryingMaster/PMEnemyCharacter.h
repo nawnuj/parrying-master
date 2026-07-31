@@ -17,6 +17,9 @@ public:
     APMEnemyCharacter();
     // AI Controller가 공격 거리 안에서 호출합니다.
     void TryAttack(AActor* TargetActor);
+   
+    // 진행 중인 공격과 전투 상태를 정리합니다.
+    void StopCombat();
 
 protected:
     virtual void BeginPlay() override;

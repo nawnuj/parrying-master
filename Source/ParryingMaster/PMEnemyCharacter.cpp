@@ -62,14 +62,8 @@ void APMEnemyCharacter::BeginPlay()
 
 void APMEnemyCharacter::HandleDeath()
 {
-    bCanAttack = false;
-    bIsAttacking = false;
+    StopCombat();
 
-    GetWorldTimerManager().ClearTimer(
-        AttackCooldownTimer
-    );
-
-    StopAnimMontage(EnemyAttackMontage);
     if (APMEnemyAIController* EnemyAIController =
         Cast<APMEnemyAIController>(GetController()))
     {
@@ -155,6 +149,23 @@ void APMEnemyCharacter::TryAttack(AActor* TargetActor)
         EnemyAttackCooldown,
         false
     );
+}
+
+void APMEnemyCharacter::StopCombat()
+{
+    if (EnemyAttackMontage)
+    {
+        StopAnimMontage(EnemyAttackMontage);
+    }
+
+    GetWorldTimerManager().ClearTimer(
+        AttackCooldownTimer
+    );
+
+    bIsAttacking = false;
+    bCanAttack = false;
+
+    CurrentAttackTarget.Reset();
 }
 
 void APMEnemyCharacter::HandleMontageNotifyBegin(
