@@ -234,3 +234,75 @@ BP_EnemyCharacter의 Animation Class도 다음과 같이 변경했다.
 - AI 이동 애니메이션은 입력 가속도보다 실제 속도를 기준으로 판단하는 것이 안전하다.
 - 공통 Animation Blueprint를 직접 수정하기보다 용도별 복제본을 만들면 기존 캐릭터에 미치는 영향을 줄일 수 있다.
 - 애니메이션 문제를 조사할 때 Mesh, Anim Class, 이동 속도 및 상태 전환 조건을 분리해서 확인해야 한다.
+
+
+---
+
+## 플레이어 사망 후에도 적이 공격을 계속하는 문제
+
+### 발생 시점
+
+2주차 4일차 플레이어 사망과 적 AI 동작을 테스트하는 과정에서 발생했다.
+
+### 증상
+
+- 적의 공격으로 플레이어 체력이 0이 된 뒤에도 적이 공격 몽타주를 반복해서 재생했다.
+- 플레이어 체력은 0 아래로 감소하지 않았지만 적은 사망한 플레이어를 계속 추적 대상으로 사용했다.
+
+### 조사
+
+플레이어의 `UPMHealthComponent`는 체력이 0이 되면 `bIsDead`를 true로 변경하고 추가 피해를 무시하고 있었다.
+
+하지만 플레이어 Pawn은 맵에 계속 존재했고, 적 AI Controller의 `TargetPawn`도 유효한 상태로 남아 있었다.
+
+```text
+플레이어 체력 0
+→ HealthComponent 사망 상태
+→ 플레이어 Pawn은 계속 존재
+→ TargetPawn은 여전히 유효
+→ 추적 및 공격 요청 반복
+
+```
+### 원인
+
+적 AI Controller는 Target Pawn의 유효성만 확인하고 플레이어의 체력 및 사망 상태는 확인하지 않았다.
+
+Actor 또는 Pawn이 유효하다는 사실만으로 살아 있는 대상이라고 판단했기 때문에 사망 이후에도 기존 AI 로직이 계속 실행되었다.
+
+### 해결 방법
+
+적 AI Controller가 Target Pawn에 연결된 UPMHealthComponent를 찾도록 변경했다.
+
+```text
+TargetPawn
+→ FindComponentByClass<UPMHealthComponent>()
+→ IsDead()
+
+```
+
+플레이어가 사망한 경우 다음 상태를 정리했다.
+
+```text
+StopMovement()
+→ EnemyCharacter의 StopCombat()
+→ TargetPawn.Reset()
+→ AI Controller Tick 비활성화
+→ return
+
+```
+
+APMEnemyCharacter::StopCombat()은 다음 공격 상태를 한 번에 정리한다.
+
+- 공격 몽타주 중지
+- 공격 쿨다운 타이머 제거
+- bIsAttacking 해제
+- bCanAttack 비활성화
+- CurrentAttackTarget 해제
+
+### 배운 점
+
+- Pawn의 유효성과 캐릭터의 생존 상태는 별도로 확인해야 한다.
+- 생존 상태의 원본은 체력 컴포넌트 한 곳에서 관리하는 것이 안전하다.
+- AI Controller는 판단과 추적을 담당하고 EnemyCharacter는 공격 상태를 직접 정리하도록 역할을 나눌 수 있다.
+- 여러 공격 상태를 하나의 StopCombat() 함수로 묶으면 중복 코드와 누락 가능성을 줄일 수 있다.
+- 플레이어 부활 기능을 구현할 경우 비활성화한 AI Tick을 다시 활성화해야 한다.
