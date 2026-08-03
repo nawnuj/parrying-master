@@ -115,6 +115,23 @@ protected:
     )
     TObjectPtr<UAnimMontage> AttackMontage;
 
+    // 피해를 받았을 때 재생할 피격 몽타주입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Hit Reaction"
+    )
+    TObjectPtr<UAnimMontage> HitReactMontage;
+
+    // 피격 후 행동할 수 없게 되는 시간입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Hit Reaction",
+        meta = (ClampMin = "0.05")
+    )
+    float HitStunDuration = 0.5f;
+
     // 한 번의 기본 공격으로 주는 피해량입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -224,6 +241,25 @@ private:
         FName NotifyName,
         const FBranchingPointNotifyPayload& BranchingPointPayload
     );
+   
+    // 피격 여부를 검사할 수 있도록 점프 입력을 받습니다.
+    void StartJump();
+
+    // 진행 중인 공격을 강제로 취소합니다.
+    void CancelAttack();
+
+    // 체력 변화를 받아 피해 여부를 판단합니다.
+    UFUNCTION()
+    void HandleHealthChanged(
+        float CurrentHealth,
+        float MaxHealth
+    );
+
+    // 피격 상태를 시작합니다.
+    void StartHitReaction();
+
+    // 피격 경직을 종료합니다.
+    void EndHitReaction();
 
     // 캐릭터 앞쪽을 검사하고 대상에게 피해를 줍니다.
     void PerformAttackTrace();
@@ -234,11 +270,23 @@ private:
     // 현재 공격 중인지 나타냅니다.
     bool bIsAttacking = false;
 
+    // 사망하거나 피격 중이면 행동할 수 없습니다.
+    bool CanPerformAction() const;
+
     // 회피 쿨다운을 관리하는 타이머입니다.
     FTimerHandle DodgeCooldownTimer;
 
     // 공격 입력 연속 실행을 방지하는 타이머입니다.
     FTimerHandle AttackTimer;
+
+    // 마지막으로 확인한 체력입니다.
+    float PreviousHealth = 0.0f;
+
+    // 현재 피격 경직 상태인지 나타냅니다.
+    bool bIsHitReacting = false;
+
+    // 피격 경직 종료 시간을 관리합니다.
+    FTimerHandle HitReactTimer;
 
     // 체력이 0이 되었을 때 호출됩니다.
     UFUNCTION()

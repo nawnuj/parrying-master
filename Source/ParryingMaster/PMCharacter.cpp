@@ -88,6 +88,22 @@ void APMCharacter::BeginPlay()
 {
     Super::BeginPlay();
 
+    if (HealthComponent)
+    {
+        PreviousHealth =
+            HealthComponent->GetCurrentHealth();
+
+        HealthComponent->OnHealthChanged.AddDynamic(
+            this,
+            &APMCharacter::HandleHealthChanged
+        );
+
+        HealthComponent->OnDeath.AddDynamic(
+            this,
+            &APMCharacter::HandleDeath
+        );
+    }
+
     // 현재 캐릭터를 조종하는 PlayerController를 가져옵니다.
     APlayerController* PlayerController =
         Cast<APlayerController>(Controller);
@@ -120,14 +136,6 @@ void APMCharacter::BeginPlay()
         InputSubsystem->AddMappingContext(
             DefaultMappingContext,
             0
-        );
-    }
-
-    if (HealthComponent)
-    {
-        HealthComponent->OnDeath.AddDynamic(
-            this,
-            &APMCharacter::HandleDeath
         );
     }
 
@@ -191,7 +199,7 @@ void APMCharacter::SetupPlayerInputComponent(
             JumpAction,
             ETriggerEvent::Started,
             this,
-            &ACharacter::Jump
+            &APMCharacter::StartJump
         );
 
         // Space에서 손을 떼면 점프 입력을 종료합니다.
@@ -258,6 +266,11 @@ void APMCharacter::SetupPlayerInputComponent(
 
 void APMCharacter::Move(const FInputActionValue& Value)
 {
+    if (!CanPerformAction())
+    {
+        return;
+    }
+
     // IA_Move의 Axis2D 값을 가져옵니다.
     const FVector2D MovementValue =
         Value.Get<FVector2D>();
@@ -318,8 +331,23 @@ void APMCharacter::Look(const FInputActionValue& Value)
     );
 }
 
+void APMCharacter::StartJump()
+{
+    if (!CanPerformAction())
+    {
+        return;
+    }
+
+    Jump();
+}
+
 void APMCharacter::StartSprint()
 {
+    if (!CanPerformAction())
+    {
+        return;
+    }
+
     GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
 }
 
@@ -330,6 +358,11 @@ void APMCharacter::StopSprint()
 
 void APMCharacter::Dodge()
 {
+    if (!CanPerformAction())
+    {
+        return;
+    }
+
     // 아직 쿨다운 중이면 회피하지 않습니다.
     if (!bCanDodge)
     {
@@ -400,6 +433,11 @@ void APMCharacter::ResetDodge()
 
 void APMCharacter::Attack()
 {
+    if (!CanPerformAction())
+    {
+        return;
+    }
+
     // 이미 공격 중이면 추가 공격 입력을 무시합니다.
     if (bIsAttacking)
     {
@@ -445,27 +483,6 @@ void APMCharacter::Attack()
 void APMCharacter::ResetAttack()
 {
     bIsAttacking = false;
-}
-
-void APMCharacter::HandleDeath()
-{
-    // 사망하면 이동을 정지합니다.
-    GetCharacterMovement()->DisableMovement();
-
-    APlayerController* PlayerController =
-        Cast<APlayerController>(Controller);
-
-    if (PlayerController)
-    {
-        // 플레이어 입력을 비활성화합니다.
-        DisableInput(PlayerController);
-    }
-
-    UE_LOG(
-        LogTemp,
-        Warning,
-        TEXT("Player input and movement disabled.")
-    );
 }
 
 void APMCharacter::HandleMontageNotifyBegin(
@@ -604,5 +621,155 @@ void APMCharacter::PerformAttackTrace()
         bHit ? FColor::Green : FColor::Red,
         false,
         1.0f
+    );
+}
+
+bool APMCharacter::CanPerformAction() const
+{
+    if (bIsHitReacting)
+    {
+        return false;
+    }
+
+    if (
+        HealthComponent
+        && HealthComponent->IsDead()
+        )
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void APMCharacter::CancelAttack()
+{
+    GetWorldTimerManager().ClearTimer(
+        AttackTimer
+    );
+
+    if (AttackMontage)
+    {
+        StopAnimMontage(AttackMontage);
+    }
+
+    ResetAttack();
+}
+
+void APMCharacter::HandleHealthChanged(
+    float CurrentHealth,
+    float MaxHealth
+)
+{
+    (void)MaxHealth;
+
+    const bool bTookDamage =
+        CurrentHealth < PreviousHealth;
+
+    PreviousHealth = CurrentHealth;
+
+    // 체력이 0이면 곧 OnDeath가 방송되므로
+    // 일반 피격 반응을 실행하지 않습니다.
+    if (CurrentHealth <= 0.0f)
+    {
+        return;
+    }
+
+    if (!bTookDamage)
+    {
+        return;
+    }
+
+    // 추가 피해는 적용되지만 피격 반응은
+    // 처음부터 다시 시작하지 않습니다.
+    if (bIsHitReacting)
+    {
+        return;
+    }
+
+    StartHitReaction();
+}
+
+void APMCharacter::StartHitReaction()
+{
+    if (bIsHitReacting)
+    {
+        return;
+    }
+
+    bIsHitReacting = true;
+
+    StopSprint();
+    StopJumping();
+    CancelAttack();
+
+    GetCharacterMovement()->StopMovementImmediately();
+
+    if (HitReactMontage)
+    {
+        PlayAnimMontage(HitReactMontage);
+    }
+
+    GetWorldTimerManager().SetTimer(
+        HitReactTimer,
+        this,
+        &APMCharacter::EndHitReaction,
+        HitStunDuration,
+        false
+    );
+}
+
+void APMCharacter::EndHitReaction()
+{
+    // 타이머가 끝나기 전에 사망했다면
+    // 행동 가능한 상태로 복구하지 않습니다.
+    if (
+        HealthComponent
+        && HealthComponent->IsDead()
+        )
+    {
+        return;
+    }
+
+    bIsHitReacting = false;
+}
+
+void APMCharacter::HandleDeath()
+{
+    GetWorldTimerManager().ClearTimer(
+        HitReactTimer
+    );
+
+    GetWorldTimerManager().ClearTimer(
+        DodgeCooldownTimer
+    );
+
+    bIsHitReacting = false;
+    bCanDodge = false;
+
+    StopSprint();
+    StopJumping();
+    CancelAttack();
+
+    if (HitReactMontage)
+    {
+        StopAnimMontage(HitReactMontage);
+    }
+
+    GetCharacterMovement()->StopMovementImmediately();
+    GetCharacterMovement()->DisableMovement();
+
+    APlayerController* PlayerController =
+        Cast<APlayerController>(Controller);
+
+    if (PlayerController)
+    {
+        DisableInput(PlayerController);
+    }
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Player input and movement disabled.")
     );
 }
