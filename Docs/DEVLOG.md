@@ -631,3 +631,105 @@ OnHealthChanged
 - 3타가 종료되거나 일정 시간 동안 추가 입력이 없으면 콤보 단계를 1타로 초기화할 예정이다.
 - 피격 또는 사망으로 공격이 취소되면 현재 콤보 단계와 예약된 공격 입력도 함께 초기화할 예정이다.
 - 이후 검 공격 애니메이션과 무기 궤적 판정으로 교체하더라도 같은 연속 공격 구조를 재사용할 수 있도록 구현할 예정이다.
+
+---
+
+## 2주차 6일차 — 플레이어 3단 연속 공격
+
+### 목표
+
+서로 다른 세 종류의 공격 애니메이션을 하나의 몽타주에 구성하고, 정해진 입력 가능 구간에 들어온 공격 입력을 예약하여 다음 공격으로 연결되는 3단 콤보를 구현한다.
+
+### 구현 내용
+
+- `AM_Player_Attack_01`에 `MM_Attack_01`, `MM_Attack_02`, `MM_Attack_03` 배치
+- 공격별 `Attack1`, `Attack2`, `Attack3` Montage Section 구성
+- 한 번의 입력으로 모든 공격이 자동 재생되지 않도록 Section 기본 연결 제거
+- 각 공격의 타격 시점에 `AttackHit` Montage Notify 배치
+- 1타와 2타에 `ComboWindowOpen`, `ComboWindowClose` Montage Notify 배치
+- 현재 콤보 단계를 관리하는 `CurrentComboIndex` 추가
+- 다음 입력 허용 상태를 관리하는 `bCanQueueCombo` 추가
+- 다음 공격 예약 상태를 관리하는 `bComboInputQueued` 추가
+- 최대 콤보 단계를 나타내는 `MaxComboCount` 추가
+- 첫 공격을 시작하는 `StartCombo()` 구현
+- 콤보 단계에 해당하는 Section 이름을 반환하는 `GetComboSectionName()` 구현
+- 예약 입력에 따라 다음 Section을 연결하는 `TryContinueCombo()` 구현
+- 전체 콤보 상태를 초기화하는 `ResetCombo()` 구현
+- `Montage_SetNextSection()`을 이용한 다음 공격 연결
+- 공격 몽타주 종료 이벤트와 `HandleMontageEnded()` 연결
+- 기존 공격 종료용 `AttackTimer`와 `ResetAttack()` 제거
+- 정상 종료와 강제 취소에서 `ResetCombo()` 재사용
+- 피격 또는 사망 시 공격 몽타주와 예약된 콤보 입력 정리
+- 세 공격 모두 기존 `AttackDamage`와 `PerformAttackTrace()` 재사용
+- `ABP_Unarmed`에서 `Control Rig`과 `DefaultSlot` 노드 순서 변경
+- 공격 몽타주가 Foot IK 이후에 적용되도록 구성
+- 콤보 점검을 위한 임시 출력 로그 추가 후 제거
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Max Combo Count | 3 |
+| Combo Sections | Attack1, Attack2, Attack3 |
+| Attack Animations | MM_Attack_01, MM_Attack_02, MM_Attack_03 |
+| Attack Damage | 20 |
+| Combo Input Storage | bool |
+| Section 연결 방식 | Montage_SetNextSection |
+| 공격 종료 처리 | OnMontageEnded |
+
+### 상태 처리
+
+```text
+공격 입력
+├─ 공격 중이 아님
+│  → StartCombo()
+│  → CurrentComboIndex = 1
+│  → Attack1 재생
+│
+└─ 공격 중
+   ├─ Combo Window 열림
+   │  → 다음 공격 입력 예약
+   └─ Combo Window 닫힘
+      → 입력 무시
+
+ComboWindowClose
+├─ 예약 입력 있음
+│  → 다음 Section 연결
+│  → 콤보 단계 증가
+│  → 예약 입력 소비
+│
+└─ 예약 입력 없음
+   → 현재 Section 종료까지 재생
+   → 몽타주 종료 이벤트
+   → ResetCombo()
+
+피격 또는 사망
+→ CancelAttack()
+→ 공격 몽타주 중단
+→ ResetCombo()
+```
+
+### 테스트 결과 
+
+- 공격 키를 한 번 누르면 1타만 재생된다.
+- 입력 가능 구간 밖에서 누른 공격 입력은 무시된다.
+- 1타의 Combo Window에서 입력하면 2타로 연결된다.
+- 2타의 Combo Window에서 입력하면 3타로 연결된다.
+- 공격 키를 반복해서 눌러도 공격 단계를 건너뛰지 않는다.
+- 각 공격의 AttackHit 시점에 피해가 한 번씩 적용된다.
+- 추가 입력이 없으면 현재 공격까지만 재생한 뒤 콤보가 초기화된다.
+- 3타 종료 후 다음 공격은 다시 1타부터 시작한다.
+- 피격 또는 사망 시 진행 중인 콤보와 예약 입력이 초기화된다.
+- 3타 발차기 애니메이션에서 다리가 꼬이던 문제가 해결되었다.
+- 기존 피격, 경직, 적 공격, 피해 및 HUD 기능이 정상적으로 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 세 공격은 현재 동일한 공격 피해량과 구체 Sweep 판정을 사용한다.
+- 공격 중 전진 이동과 방향 보정이 없어 움직이는 적을 맞히기 어렵다.
+- 이후 공격 시작 방향을 이동 입력 또는 가까운 적 방향으로 보정할 예정이다.
+- 공격마다 짧은 전진 이동 또는 Root Motion을 적용할 예정이다.
+- 현재 콤보 구성은 세 단계와 고정된 Section 이름을 사용한다.
+- 이후 무기별 콤보 데이터와 공격 단계별 피해량으로 확장할 예정이다.
+- 현재 맨손 공격을 사용하며 이후 검 공격과 무기 궤적 기반 판정으로 교체할 예정이다.
+

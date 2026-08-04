@@ -306,3 +306,121 @@ APMEnemyCharacter::StopCombat()은 다음 공격 상태를 한 번에 정리한�
 - AI Controller는 판단과 추적을 담당하고 EnemyCharacter는 공격 상태를 직접 정리하도록 역할을 나눌 수 있다.
 - 여러 공격 상태를 하나의 StopCombat() 함수로 묶으면 중복 코드와 누락 가능성을 줄일 수 있다.
 - 플레이어 부활 기능을 구현할 경우 비활성화한 AI Tick을 다시 활성화해야 한다.
+
+---
+
+## 콤보 입력이 예약되어도 다음 공격이 재생되지 않는 문제
+
+### 발생 시점
+
+2주차 6일차 플레이어 3단 연속 공격을 구현하는 과정에서 발생했다.
+
+### 증상
+
+- 공격 키를 한 번 누르면 1타가 정상적으로 재생되었다.
+- `AttackHit`, `ComboWindowOpen`, `ComboWindowClose` Notify가 모두 발생했다.
+- 입력 가능 구간에서 공격 키를 눌러도 2타로 연결되지 않았다.
+- 출력 로그에서는 입력 예약과 Section 연결 함수가 정상적으로 실행되고 있었다.
+
+```text
+Combo Input: Index=1, CanQueue=true
+Combo input queued.
+TryContinueCombo: Index=1, Queued=true
+Connect Section: Attack1 -> Attack2
+```
+
+### 원인 
+
+ComboWindowClose Notify가 현재 Section의 끝부분에 너무 가깝게 배치되어 있었다.
+
+다음 Section 연결 요청은 실행되었지만 현재 공격이 종료되는 시점과 지나치게 가까워 실제 몽타주 재생에 연결이 반영되지 않았다.
+
+### 해결 방법 
+
+ComboWindowClose를 Section 끝에서 더 앞쪽으로 이동하여 다음 Section을 연결할 시간을 확보했다.
+
+```text
+Attack1 종료: 약 30프레임
+ComboWindowClose: 약 20~22프레임
+
+Attack2 종료: 약 60프레임
+ComboWindowClose: 약 50~52프레임
+```
+
+문제 해결 과정에서는 출력 로그를 이용해 다음 단계를 각각 확인했다.
+
+```text
+Montage Notify 발생
+→ 입력 가능 상태 활성화
+→ 다음 공격 입력 예약
+→ ComboWindowClose 발생
+→ 다음 Section 연결
+```
+
+### 배운 점
+
+- 함수가 호출되었다는 사실과 애니메이션 전환이 실제로 적용되었다는 사실은 별도로 확인해야 한다.
+- Montage Notify는 현재 Section이 끝나기 전에 충분한 여유를 두고 배치해야 한다.
+- 콤보 문제는 입력, 입력 예약, Notify 및 Section 연결 단계를 나누어 조사하면 원인을 찾기 쉽다.
+- 디버그 로그는 문제 해결 후 제거하여 출력 로그의 불필요한 반복을 줄이는 것이 좋다.
+
+---
+
+## 3타 발차기에서 다리가 꼬이는 문제
+
+### 발생 시점
+
+2주차 6일차 3단 콤보 애니메이션을 테스트하는 과정에서 발생했다.
+
+### 증상
+
+- 1타와 2타의 주먹 공격은 정상적으로 재생되었다.
+- 3타 발차기에서 발이 정상적으로 뻗지 않고 다리가 꼬인 상태로 재생되었다.
+- 콤보 단계와 Section 연결 자체는 정상적으로 작동했다.
+
+### 원인
+
+ABP_Unarmed의 AnimGraph에서 공격 몽타주 Slot 뒤에 Control Rig이 연결되어 있었다.
+
+```text
+Main States
+→ Slot 'DefaultSlot'
+→ Control Rig
+→ Output Pose
+```
+
+공격 몽타주가 발차기 자세를 만든 뒤 Control Rig의 Foot IK가 발을 다시 바닥에 고정하면서 발차기 동작과 충돌했다.
+
+1타와 2타는 상체 중심의 공격이라 문제가 두드러지지 않았지만, 하체 전체를 사용하는 3타 발차기에서는 다리가 꼬이는 현상이 발생했다.
+
+### 해결 방법 
+
+Control Rig이 이동 애니메이션의 발 위치를 먼저 보정하고 공격 몽타주가 마지막에 전신 자세를 적용하도록 노드 순서를 변경했다.
+
+변경 전:
+
+```text
+Main States
+→ Slot 'DefaultSlot'
+→ Control Rig
+→ Output Pose
+```
+
+변경 후:
+
+```text
+Main States
+→ Control Rig
+→ Slot 'DefaultSlot'
+→ Output Pose
+```
+
+Is Falling → NOT → Should Do IKTrace 연결은 기존 상태를 유지했다.
+
+### 배운 점
+
+- Animation Blueprint에서는 같은 노드를 사용해도 적용 순서에 따라 최종 자세가 달라진다.
+- Foot IK가 전신 공격 몽타주 뒤에 적용되면 발차기와 같은 하체 동작을 덮어쓸 수 있다.
+- 상체 공격이 정상이라고 해서 하체까지 몽타주가 정상 적용된 것은 아니다.
+- 전신 공격 몽타주는 필요한 경우 Foot IK 이후에 적용해야 한다.
+- 애니메이션 문제는 원본 애니메이션, 몽타주 및 Animation Blueprint를 나누어 확인해야 한다.
