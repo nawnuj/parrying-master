@@ -232,14 +232,32 @@ private:
     // 기본 공격을 시작합니다.
     void Attack();
 
-    // 공격 애니메이션이 끝나면 호출됩니다.
-    void ResetAttack();
+    // 3단 콤보의 첫 번째 공격을 시작합니다.
+    void StartCombo();
+
+    // 예약된 입력이 있으면 다음 공격으로 연결합니다.
+    void TryContinueCombo();
+
+    // 콤보 단계에 해당하는 Montage Section 이름을 반환합니다.
+    FName GetComboSectionName(
+        int32 ComboIndex
+    ) const;
+
+    // 모든 콤보 상태를 초기화합니다.
+    void ResetCombo();
 
     // 공격 몽타주의 Notify가 발생했을 때 호출됩니다.
     UFUNCTION()
     void HandleMontageNotifyBegin(
         FName NotifyName,
         const FBranchingPointNotifyPayload& BranchingPointPayload
+    );
+
+    // 몽타주가 정상 종료되거나 중단되었을 때 호출됩니다.
+    UFUNCTION()
+    void HandleMontageEnded(
+        UAnimMontage* Montage,
+        bool bInterrupted
     );
    
     // 피격 여부를 검사할 수 있도록 점프 입력을 받습니다.
@@ -270,14 +288,24 @@ private:
     // 현재 공격 중인지 나타냅니다.
     bool bIsAttacking = false;
 
+    // 현재 실행 중인 콤보 단계입니다.
+    // 0은 콤보가 진행 중이지 않은 상태입니다.
+    int32 CurrentComboIndex = 0;
+
+    // 현재 다음 공격 입력을 받을 수 있는지 나타냅니다.
+    bool bCanQueueCombo = false;
+
+    // 입력 가능 구간에 다음 공격이 예약되었는지 나타냅니다.
+    bool bComboInputQueued = false;
+
+    // 플레이어 콤보의 최대 공격 단계입니다.
+    static constexpr int32 MaxComboCount = 3;
+
     // 사망하거나 피격 중이면 행동할 수 없습니다.
     bool CanPerformAction() const;
 
     // 회피 쿨다운을 관리하는 타이머입니다.
     FTimerHandle DodgeCooldownTimer;
-
-    // 공격 입력 연속 실행을 방지하는 타이머입니다.
-    FTimerHandle AttackTimer;
 
     // 마지막으로 확인한 체력입니다.
     float PreviousHealth = 0.0f;

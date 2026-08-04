@@ -144,13 +144,14 @@ void APMCharacter::BeginPlay()
 
     if (AnimInstance)
     {
-        /*
-         * 공격 몽타주에서 Montage Notify가 발생하면
-         * HandleMontageNotifyBegin()을 실행합니다.
-         */
         AnimInstance->OnPlayMontageNotifyBegin.AddDynamic(
             this,
             &APMCharacter::HandleMontageNotifyBegin
+        );
+
+        AnimInstance->OnMontageEnded.AddDynamic(
+            this,
+            &APMCharacter::HandleMontageEnded
         );
     }
 }
@@ -438,51 +439,59 @@ void APMCharacter::Attack()
         return;
     }
 
-    // 이미 공격 중이면 추가 공격 입력을 무시합니다.
+    /*
+     * 이미 공격 중이라면 새로운 몽타주를 재생하지 않고
+     * 다음 공격 입력을 예약합니다.
+     */
     if (bIsAttacking)
     {
+        if (
+            bCanQueueCombo
+            && !bComboInputQueued
+            && CurrentComboIndex < MaxComboCount
+            )
+        {
+            bComboInputQueued = true;
+        }
+
         return;
     }
 
-    // 공중에서는 공격하지 못하게 합니다.
+    // 공중에서는 콤보를 시작할 수 없습니다.
     if (GetCharacterMovement()->IsFalling())
     {
         return;
     }
 
-    // 공격 몽타주가 연결되지 않았다면 실행하지 않습니다.
     if (!AttackMontage)
     {
         return;
     }
 
-    /*
-     * 몽타주를 재생하고 재생 시간을 반환받습니다.
-     * 재생에 실패하면 0 이하의 값이 반환됩니다.
-     */
+    StartCombo();
+}
+
+void APMCharacter::StartCombo()
+{
+    CurrentComboIndex = 1;
+    bIsAttacking = true;
+    bCanQueueCombo = false;
+    bComboInputQueued = false;
+
+    const FName StartSection =
+        GetComboSectionName(CurrentComboIndex);
+
     const float MontageDuration =
-        PlayAnimMontage(AttackMontage);
+        PlayAnimMontage(
+            AttackMontage,
+            1.0f,
+            StartSection
+        );
 
     if (MontageDuration <= 0.0f)
     {
-        return;
+        ResetCombo();
     }
-
-    bIsAttacking = true;
-
-    // 몽타주 재생이 끝나면 공격 상태를 해제합니다.
-    GetWorldTimerManager().SetTimer(
-        AttackTimer,
-        this,
-        &APMCharacter::ResetAttack,
-        MontageDuration,
-        false
-    );
-}
-
-void APMCharacter::ResetAttack()
-{
-    bIsAttacking = false;
 }
 
 void APMCharacter::HandleMontageNotifyBegin(
@@ -490,23 +499,48 @@ void APMCharacter::HandleMontageNotifyBegin(
     const FBranchingPointNotifyPayload& BranchingPointPayload
 )
 {
-    /*
-     * 현재는 Payload를 사용하지 않습니다.
-     * 사용하지 않는 매개변수라는 것을 명시합니다.
-     */
     (void)BranchingPointPayload;
 
-    /*
-     * AttackHit이라는 이름의 Notify이고
-     * 실제 공격 중일 때만 공격 판정을 실행합니다.
-     */
-    if (
-        NotifyName == TEXT("AttackHit")
-        && bIsAttacking
-        )
+    if (!bIsAttacking)
+    {
+        return;
+    }
+
+    if (NotifyName == TEXT("AttackHit"))
     {
         PerformAttackTrace();
+        return;
     }
+
+    if (NotifyName == TEXT("ComboWindowOpen"))
+    {
+        if (CurrentComboIndex < MaxComboCount)
+        {
+            bCanQueueCombo = true;
+        }
+
+        return;
+    }
+
+    if (NotifyName == TEXT("ComboWindowClose"))
+    {
+        TryContinueCombo();
+    }
+}
+
+void APMCharacter::HandleMontageEnded(
+    UAnimMontage* Montage,
+    bool bInterrupted
+)
+{
+    (void)bInterrupted;
+
+    if (Montage != AttackMontage)
+    {
+        return;
+    }
+
+    ResetCombo();
 }
 
 void APMCharacter::PerformAttackTrace()
@@ -644,16 +678,12 @@ bool APMCharacter::CanPerformAction() const
 
 void APMCharacter::CancelAttack()
 {
-    GetWorldTimerManager().ClearTimer(
-        AttackTimer
-    );
-
     if (AttackMontage)
     {
         StopAnimMontage(AttackMontage);
     }
 
-    ResetAttack();
+    ResetCombo();
 }
 
 void APMCharacter::HandleHealthChanged(
@@ -773,3 +803,87 @@ void APMCharacter::HandleDeath()
         TEXT("Player input and movement disabled.")
     );
 }
+
+FName APMCharacter::GetComboSectionName(
+    int32 ComboIndex
+) const
+{
+    switch (ComboIndex)
+    {
+    case 1:
+        return FName(TEXT("Attack1"));
+
+    case 2:
+        return FName(TEXT("Attack2"));
+
+    case 3:
+        return FName(TEXT("Attack3"));
+
+    default:
+        return NAME_None;
+    }
+}
+
+void APMCharacter::TryContinueCombo()
+{
+    bCanQueueCombo = false;
+
+    if (!bComboInputQueued)
+    {
+        return;
+    }
+
+    if (CurrentComboIndex >= MaxComboCount)
+    {
+        bComboInputQueued = false;
+        return;
+    }
+
+    UAnimInstance* AnimInstance =
+        GetMesh()->GetAnimInstance();
+
+    if (!AnimInstance || !AttackMontage)
+    {
+        ResetCombo();
+        return;
+    }
+
+    const FName CurrentSection =
+        GetComboSectionName(CurrentComboIndex);
+
+    const FName NextSection =
+        GetComboSectionName(CurrentComboIndex + 1);
+
+    if (
+        CurrentSection.IsNone()
+        || NextSection.IsNone()
+        )
+    {
+        ResetCombo();
+        return;
+    }
+
+    /*
+     * 현재 Section이 끝난 뒤 다음 Section으로
+     * 이어지도록 연결합니다.
+     */
+    AnimInstance->Montage_SetNextSection(
+        CurrentSection,
+        NextSection,
+        AttackMontage
+    );
+
+    ++CurrentComboIndex;
+
+    // 사용한 예약 입력을 제거합니다.
+    bComboInputQueued = false;
+}
+
+void APMCharacter::ResetCombo()
+{
+    bIsAttacking = false;
+    CurrentComboIndex = 0;
+    bCanQueueCombo = false;
+    bComboInputQueued = false;
+}
+
