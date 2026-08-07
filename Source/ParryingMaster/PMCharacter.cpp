@@ -263,6 +263,17 @@ void APMCharacter::SetupPlayerInputComponent(
             &APMCharacter::Attack
         );
     }
+
+    // 마우스 오른쪽 버튼을 누르면 패링을 시도합니다.
+    if (ParryAction)
+    {
+        EnhancedInputComponent->BindAction(
+            ParryAction,
+            ETriggerEvent::Started,
+            this,
+            &APMCharacter::StartParry
+        );
+    }
 }
 
 void APMCharacter::Move(const FInputActionValue& Value)
@@ -339,6 +350,11 @@ void APMCharacter::StartJump()
         return;
     }
 
+    if (bIsParrying)
+    {
+        return;
+    }
+
     Jump();
 }
 
@@ -360,6 +376,11 @@ void APMCharacter::StopSprint()
 void APMCharacter::Dodge()
 {
     if (!CanPerformAction())
+    {
+        return;
+    }
+
+    if (bIsParrying)
     {
         return;
     }
@@ -439,6 +460,11 @@ void APMCharacter::Attack()
         return;
     }
 
+    if (bIsParrying)
+    {
+        return;
+    }
+
     /*
      * 이미 공격 중이라면 새로운 몽타주를 재생하지 않고
      * 다음 공격 입력을 예약합니다.
@@ -469,6 +495,105 @@ void APMCharacter::Attack()
     }
 
     StartCombo();
+}
+
+bool APMCharacter::IsParrying() const
+{
+    return bIsParrying;
+}
+
+void APMCharacter::StartParry()
+{
+    // 피격 또는 사망 상태에서는 패링할 수 없습니다.
+    if (!CanPerformAction())
+    {
+        return;
+    }
+
+    // 패링 쿨다운 중에는 다시 시작하지 않습니다.
+    if (!bCanParry)
+    {
+        return;
+    }
+
+    // 이미 패링 판정이 활성화되어 있다면 중복 실행하지 않습니다.
+    if (bIsParrying)
+    {
+        return;
+    }
+
+    // 공격 중에는 패링으로 전환할 수 없습니다.
+    if (bIsAttacking)
+    {
+        return;
+    }
+
+    // 공중에서는 패링할 수 없습니다.
+    if (GetCharacterMovement()->IsFalling())
+    {
+        return;
+    }
+
+    bIsParrying = true;
+    bCanParry = false;
+
+
+    // 짧은 패링 성공 판정 시간을 시작합니다.
+    GetWorldTimerManager().SetTimer(
+        ParryWindowTimer,
+        this,
+        &APMCharacter::EndParry,
+        ParryWindowDuration,
+        false
+    );
+
+    /*
+     * 패링 입력 시점부터 쿨다운을 계산합니다.
+     * 설정 실수로 쿨다운이 판정 시간보다 짧아지지 않게 보정합니다.
+     */
+    const float EffectiveCooldown =
+        FMath::Max(
+            ParryCooldown,
+            ParryWindowDuration
+        );
+
+    GetWorldTimerManager().SetTimer(
+        ParryCooldownTimer,
+        this,
+        &APMCharacter::ResetParryCooldown,
+        EffectiveCooldown,
+        false
+    );
+}
+
+void APMCharacter::EndParry()
+{
+    if (!bIsParrying)
+    {
+        return;
+    }
+
+    GetWorldTimerManager().ClearTimer(
+        ParryWindowTimer
+    );
+
+    bIsParrying = false;
+
+}
+
+void APMCharacter::ResetParryCooldown()
+{
+    // 사망했다면 패링 가능 상태로 복구하지 않습니다.
+    if (
+        HealthComponent
+        && HealthComponent->IsDead()
+        )
+    {
+        return;
+    }
+
+    bCanParry = true;
+
 }
 
 void APMCharacter::StartCombo()
@@ -729,6 +854,8 @@ void APMCharacter::StartHitReaction()
 
     bIsHitReacting = true;
 
+    EndParry();
+
     StopSprint();
     StopJumping();
     CancelAttack();
@@ -774,8 +901,18 @@ void APMCharacter::HandleDeath()
         DodgeCooldownTimer
     );
 
+    GetWorldTimerManager().ClearTimer(
+        ParryWindowTimer
+    );
+
+    GetWorldTimerManager().ClearTimer(
+        ParryCooldownTimer
+    );
+
     bIsHitReacting = false;
     bCanDodge = false;
+    bIsParrying = false;
+    bCanParry = false;
 
     StopSprint();
     StopJumping();

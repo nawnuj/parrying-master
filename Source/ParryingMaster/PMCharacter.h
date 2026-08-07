@@ -23,6 +23,13 @@ class PARRYINGMASTER_API APMCharacter : public ACharacter
 public:
     APMCharacter();
 
+    // 현재 패링 판정이 활성화되어 있는지 반환합니다.
+    UFUNCTION(
+        BlueprintPure,
+        Category = "Combat|Parry"
+    )
+    bool IsParrying() const;
+
 protected:
     // 게임이 시작될 때 한 번 실행됩니다.
     virtual void BeginPlay() override;
@@ -107,6 +114,14 @@ protected:
     )
     TObjectPtr<UInputAction> AttackAction;
 
+    // IA_Parry를 연결할 자리입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
+    TObjectPtr<UInputAction> ParryAction;
+
     // 공격할 때 재생할 애니메이션 몽타주입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -131,6 +146,24 @@ protected:
         meta = (ClampMin = "0.05")
     )
     float HitStunDuration = 0.5f;
+
+    // 패링 성공 판정이 활성화되는 시간입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Parry",
+        meta = (ClampMin = "0.01")
+    )
+    float ParryWindowDuration = 0.2f;
+
+    // 패링 입력 후 다시 패링할 수 있을 때까지의 시간입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Parry",
+        meta = (ClampMin = "0.01")
+    )
+    float ParryCooldown = 0.6f;
 
     // 한 번의 기본 공격으로 주는 피해량입니다.
     UPROPERTY(
@@ -232,6 +265,15 @@ private:
     // 기본 공격을 시작합니다.
     void Attack();
 
+    // 패링 입력을 받아 짧은 패링 판정을 시작합니다.
+    void StartParry();
+
+    // 활성화된 패링 판정을 종료합니다.
+    void EndParry();
+
+    // 패링 쿨다운을 종료하고 다시 사용할 수 있게 합니다.
+    void ResetParryCooldown();
+
     // 3단 콤보의 첫 번째 공격을 시작합니다.
     void StartCombo();
 
@@ -287,6 +329,18 @@ private:
 
     // 현재 공격 중인지 나타냅니다.
     bool bIsAttacking = false;
+
+    // 현재 패링 성공 판정이 활성화되어 있는지 나타냅니다.
+    bool bIsParrying = false;
+
+    // 현재 새로운 패링을 시작할 수 있는지 나타냅니다.
+    bool bCanParry = true;
+
+    // 패링 판정 종료 시간을 관리합니다.
+    FTimerHandle ParryWindowTimer;
+
+    // 패링 쿨다운 종료 시간을 관리합니다.
+    FTimerHandle ParryCooldownTimer;
 
     // 현재 실행 중인 콤보 단계입니다.
     // 0은 콤보가 진행 중이지 않은 상태입니다.
