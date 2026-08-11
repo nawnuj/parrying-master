@@ -21,6 +21,13 @@ public:
     // 진행 중인 공격과 전투 상태를 정리합니다.
     void StopCombat();
 
+    // 현재 적의 공격이 패링 가능한 상태인지 반환합니다.
+    UFUNCTION(
+        BlueprintPure,
+        Category = "Combat|Parry"
+    )
+    bool IsAttackParryable() const;
+
 protected:
     virtual void BeginPlay() override;
 
@@ -80,11 +87,20 @@ private:
         const FBranchingPointNotifyPayload& BranchingPointPayload
     );
 
+    // 현재 적 공격의 패링 가능 구간을 시작합니다.
+    void OpenParryWindow();
+
+    // 현재 적 공격의 패링 가능 구간을 종료합니다.
+    void CloseParryWindow();
+
     void PerformAttackTrace();
     void ResetAttack();
 
     bool bIsAttacking = false;
     bool bCanAttack = true;
+
+    // 현재 적 공격이 패링 가능한 구간인지 나타냅니다.
+    bool bIsAttackParryable = false;
 
     TWeakObjectPtr<AActor> CurrentAttackTarget;
 

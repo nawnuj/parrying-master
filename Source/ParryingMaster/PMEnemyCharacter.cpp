@@ -84,6 +84,11 @@ void APMEnemyCharacter::HandleDeath()
     SetLifeSpan(2.0f);
 }
 
+bool APMEnemyCharacter::IsAttackParryable() const
+{
+    return bIsAttackParryable;
+}
+
 void APMEnemyCharacter::TryAttack(AActor* TargetActor)
 {
     if (!bCanAttack || bIsAttacking || !TargetActor)
@@ -127,6 +132,11 @@ void APMEnemyCharacter::TryAttack(AActor* TargetActor)
             FRotator(0.0f, TargetRotation.Yaw, 0.0f)
         );
     }
+    /*
+    * 이전 공격에서 패링 가능 상태가 남아 있더라도
+    * 새로운 공격은 패링 불가능 상태로 시작합니다.
+    */
+    CloseParryWindow();
 
     CurrentAttackTarget = TargetActor;
 
@@ -153,6 +163,8 @@ void APMEnemyCharacter::TryAttack(AActor* TargetActor)
 
 void APMEnemyCharacter::StopCombat()
 {
+    CloseParryWindow();
+
     if (EnemyAttackMontage)
     {
         StopAnimMontage(EnemyAttackMontage);
@@ -175,13 +187,56 @@ void APMEnemyCharacter::HandleMontageNotifyBegin(
 {
     (void)BranchingPointPayload;
 
-    if (
-        NotifyName == FName(TEXT("EnemyAttackHit")) &&
-        bIsAttacking
-        )
+    // 공격 중이 아닐 때 발생한 Notify는 처리하지 않습니다.
+    if (!bIsAttacking)
     {
-        PerformAttackTrace();
+        return;
     }
+
+    if (NotifyName == FName(TEXT("ParryWindowOpen")))
+    {
+        OpenParryWindow();
+        return;
+    }
+
+    if (NotifyName == FName(TEXT("EnemyAttackHit")))
+    { 
+        PerformAttackTrace();
+        return;
+    }
+
+    if (NotifyName == FName(TEXT("ParryWindowClose")))
+    {
+        CloseParryWindow();
+    }
+}
+
+void APMEnemyCharacter::OpenParryWindow()
+{
+    // 공격 중이 아니라면 패링 가능 상태를 열지 않습니다.
+    if (!bIsAttacking)
+    {
+        return;
+    }
+
+    // 이미 열린 상태라면 중복 처리하지 않습니다.
+    if (bIsAttackParryable)
+    {
+        return;
+    }
+
+    bIsAttackParryable = true;
+}
+
+void APMEnemyCharacter::CloseParryWindow()
+{
+    // 이미 닫혀 있다면 중복 처리하지 않습니다.
+    if (!bIsAttackParryable)
+    {
+        return;
+    }
+
+    bIsAttackParryable = false;
 }
 
 void APMEnemyCharacter::PerformAttackTrace()
@@ -257,6 +312,8 @@ void APMEnemyCharacter::PerformAttackTrace()
 
 void APMEnemyCharacter::ResetAttack()
 {
+    CloseParryWindow();
+
     bIsAttacking = false;
     bCanAttack = true;
 
