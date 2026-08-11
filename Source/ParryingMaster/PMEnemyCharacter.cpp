@@ -4,6 +4,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "PMHealthComponent.h"
 #include "PMEnemyAIController.h"
+#include "PMCharacter.h"
 #include "Animation/AnimInstance.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/DamageType.h"
@@ -281,13 +282,34 @@ void APMEnemyCharacter::PerformAttackTrace()
         HitActor == CurrentAttackTarget.Get()
         )
     {
-        UGameplayStatics::ApplyDamage(
-            HitActor,
-            EnemyAttackDamage,
-            GetController(),
-            this,
-            UDamageType::StaticClass()
-        );
+        /*
+         * 공격 판정에 맞은 실제 Actor가 플레이어 캐릭터인지
+         * 확인합니다. 플레이어가 아니라면 nullptr가 반환됩니다.
+         */
+        APMCharacter* PlayerCharacter =
+            Cast<APMCharacter>(HitActor);
+
+        const bool bPlayerIsParrying =
+            PlayerCharacter
+            && PlayerCharacter->IsParrying();
+
+        const bool bAttackIsParryable =
+            IsAttackParryable();
+
+        const bool bParrySucceeded =
+            bPlayerIsParrying
+            && bAttackIsParryable;
+
+        if (!bParrySucceeded)
+        {
+            UGameplayStatics::ApplyDamage(
+                HitActor,
+                EnemyAttackDamage,
+                GetController(),
+                this,
+                UDamageType::StaticClass()
+            );
+        }
     }
 
     DrawDebugLine(
