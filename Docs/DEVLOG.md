@@ -908,3 +908,94 @@ ComboWindowClose
 - 실제 회피 상태를 나타내는 bIsDodging이 없어 회피 도중 패링 시작을 정확히 제한하지 않는다.
 - 이후 적 공격 몽타주의 Notify와 플레이어 패링 상태를 연결하여 성공 여부를 판정할 예정이다.
 
+---
+
+## 3주차 2일차 — 적 공격의 패링 가능 구간
+
+### 목표
+
+적 공격 전체가 아니라 실제 타격 직전부터 타격 직후까지의 짧은 구간에서만 패링할 수 있도록 적 공격의 패링 가능 상태를 구현한다.
+
+### 구현 내용
+
+- 적 공격의 패링 가능 상태를 관리하는 `bIsAttackParryable` 추가
+- 외부에서 패링 가능 상태를 확인하는 `IsAttackParryable()` 구현
+- 적 공격의 패링 가능 구간을 시작하는 `OpenParryWindow()` 구현
+- 적 공격의 패링 가능 구간을 종료하는 `CloseParryWindow()` 구현
+- `AM_Enemy_Attack_01`에 `ParryWindowOpen` Montage Notify 추가
+- `AM_Enemy_Attack_01`에 `ParryWindowClose` Montage Notify 추가
+- `EnemyAttackHit` 전후에 패링 가능 구간 Notify 배치
+- 기존 `HandleMontageNotifyBegin()`에서 세 종류의 Notify 처리
+- 공격 중이 아닐 때 발생한 공격 관련 Notify 무시
+- 패링 가능 구간이 이미 열리거나 닫힌 경우 중복 상태 변경 방지
+- 새로운 공격 시작 전에 이전 패링 가능 상태 초기화
+- 공격 쿨다운 종료 시 패링 가능 상태 초기화
+- `StopCombat()` 호출 시 패링 가능 상태 종료
+- 적 사망 시 기존 `StopCombat()`을 통해 패링 가능 상태 정리
+- 패링 가능 상태 확인을 위한 임시 출력 로그 추가 후 제거
+
+### Notify 구성
+
+| Notify | 역할 |
+|---|---|
+| `ParryWindowOpen` | 적 공격의 패링 가능 상태 활성화 |
+| `EnemyAttackHit` | 기존 근접 공격 판정과 피해 적용 |
+| `ParryWindowClose` | 적 공격의 패링 가능 상태 비활성화 |
+
+### 상태 처리
+
+```text
+적 공격 시작
+→ CloseParryWindow()
+→ bIsAttackParryable = false
+→ 공격 몽타주 재생
+
+ParryWindowOpen
+→ OpenParryWindow()
+→ bIsAttackParryable = true
+
+EnemyAttackHit
+→ bIsAttackParryable = true 상태 유지
+→ 기존 PerformAttackTrace() 실행
+→ 플레이어 피해 적용
+
+ParryWindowClose
+→ CloseParryWindow()
+→ bIsAttackParryable = false
+
+공격 쿨다운 종료
+→ ResetAttack()
+→ CloseParryWindow()
+→ 공격 상태 초기화
+
+전투 중단 또는 적 사망
+→ StopCombat()
+→ CloseParryWindow()
+→ 공격 몽타주와 전투 상태 정리
+```
+### 테스트 결과
+
+- 적 공격이 시작될 때 패링 가능 상태는 비활성화되어 있다.
+- ParryWindowOpen이 EnemyAttackHit보다 먼저 발생한다.
+- EnemyAttackHit이 발생하는 순간 패링 가능 상태가 유지된다.
+- ParryWindowClose가 타격 직후 발생한다.
+- 각 공격에서 패링 가능 구간이 한 번씩 열리고 닫힌다.
+- 다음 공격이 시작될 때 이전 패링 가능 상태가 남지 않는다.
+- 적 공격 적중 시 기존 피해 15가 정상적으로 적용된다.
+- 플레이어 체력이 100 → 85 → 70으로 정상 감소한다.
+- 적 공격 쿨다운과 반복 공격이 정상적으로 유지된다.
+- 플레이어 사망 시 적 공격과 패링 가능 상태가 함께 정리된다.
+- 적 사망 시 전투 상태와 패링 가능 상태가 함께 정리된다.
+- 임시 패링 구간 출력 로그를 제거한 뒤 전체 솔루션 빌드가 성공한다.
+
+### 현재 한계 및 향후 개선
+
+- 플레이어 패링 상태와 적 공격 패링 가능 상태는 아직 서로 비교하지 않는다.
+- 플레이어가 정확한 타이밍에 패링해도 현재는 기존 피해가 적용된다.
+- 패링 성공 시 피해 무효화가 아직 구현되지 않았다.
+- 패링 성공 시 적 공격 몽타주 중단과 경직이 아직 구현되지 않았다.
+- 패링 성공 애니메이션, 사운드, 이펙트 및 UI 피드백이 없다.
+- 현재 패링 가능 구간은 하나의 적 공격 몽타주에 직접 배치되어 있다.
+- 이후 공격 패턴이 늘어나면 각 공격 몽타주에 별도의 패링 가능 구간을 설정해야 한다.
+- 다음 단계에서는 EnemyAttackHit 시점에 플레이어의 IsParrying()과 적의 IsAttackParryable()을 함께 확인할 예정이다.
+
