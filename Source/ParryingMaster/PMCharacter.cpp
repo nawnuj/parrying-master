@@ -502,6 +502,33 @@ bool APMCharacter::IsParrying() const
     return bIsParrying;
 }
 
+bool APMCharacter::CanParryCounter() const
+{
+    return bCanParryCounter;
+}
+
+void APMCharacter::HandleSuccessfulParry()
+{
+    /*
+     * 이미 패링 판정이 소비됐다면
+     * 같은 공격에서 성공 처리를 반복하지 않습니다.
+     */
+    if (!bIsParrying)
+    {
+        return;
+    }
+
+    /*
+     * 현재 패링 판정을 즉시 종료합니다.
+     * ParryCooldownTimer는 건드리지 않으므로
+     * 기존 패링 쿨다운은 그대로 유지됩니다.
+     */
+    EndParry();
+
+    StartParryCounterWindow();
+
+}
+
 void APMCharacter::StartParry()
 {
     // 피격 또는 사망 상태에서는 패링할 수 없습니다.
@@ -594,6 +621,36 @@ void APMCharacter::ResetParryCooldown()
 
     bCanParry = true;
 
+}
+
+void APMCharacter::StartParryCounterWindow()
+{
+    /*
+     * 혹시 기존 반격 타이머가 남아 있다면 제거하고
+     * 새로운 반격 가능 시간을 시작합니다.
+     */
+    GetWorldTimerManager().ClearTimer(
+        ParryCounterWindowTimer
+    );
+
+    bCanParryCounter = true;
+
+    GetWorldTimerManager().SetTimer(
+        ParryCounterWindowTimer,
+        this,
+        &APMCharacter::EndParryCounterWindow,
+        ParryCounterWindowDuration,
+        false
+    );
+}
+
+void APMCharacter::EndParryCounterWindow()
+{
+    GetWorldTimerManager().ClearTimer(
+        ParryCounterWindowTimer
+    );
+
+    bCanParryCounter = false;
 }
 
 void APMCharacter::StartCombo()
@@ -909,10 +966,15 @@ void APMCharacter::HandleDeath()
         ParryCooldownTimer
     );
 
+    GetWorldTimerManager().ClearTimer(
+        ParryCounterWindowTimer
+    );
+
     bIsHitReacting = false;
     bCanDodge = false;
     bIsParrying = false;
     bCanParry = false;
+    bCanParryCounter = false;
 
     StopSprint();
     StopJumping();

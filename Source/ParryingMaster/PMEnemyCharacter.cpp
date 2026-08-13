@@ -415,6 +415,13 @@ void APMEnemyCharacter::PerformAttackTrace()
 
         if (bParrySucceeded)
         {
+            /*
+             * 플레이어의 현재 패링 판정을 소비하고
+             * 반격 가능 시간을 시작합니다.
+             */
+            PlayerCharacter->HandleSuccessfulParry();
+
+            // 공격한 적에게 패링 경직을 적용합니다.
             StartParryStun();
         }
         else
