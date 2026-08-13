@@ -1215,3 +1215,96 @@ AI Controller Tick
 - 패링 후 플레이어에게 별도의 반격 가능 상태를 제공하지 않는다.
 - 적 경직 시간은 현재 모든 적과 공격에서 같은 값을 사용한다.
 - 이후 적 경직 몽타주, 플레이어 패링 성공 소비 및 반격 가능 구간을 구현할 예정이다.
+
+---
+
+## 3주차 5일차 — 패링 성공 소비와 반격 가능 구간
+
+### 목표
+
+패링 성공 시 플레이어의 활성 패링 판정을 즉시 소비하여 하나의 패링으로 여러 공격이 처리되는 문제를 방지하고, 패링 성공 후 일정 시간 동안 사용할 수 있는 반격 가능 상태를 구현한다.
+
+### 구현 내용
+
+- 현재 반격 가능 여부를 관리하는 `bCanParryCounter` 추가
+- 반격 가능 시간을 관리하는 `ParryCounterWindowDuration` 추가
+- 반격 가능 상태 종료 시점을 관리하는 `ParryCounterWindowTimer` 추가
+- 외부에서 반격 가능 상태를 확인하는 `CanParryCounter()` 구현
+- 패링 성공을 플레이어에게 전달하는 `HandleSuccessfulParry()` 구현
+- 반격 가능 시간을 시작하는 `StartParryCounterWindow()` 구현
+- 반격 가능 시간을 종료하는 `EndParryCounterWindow()` 구현
+- 적의 패링 성공 분기에서 `HandleSuccessfulParry()` 호출
+- 패링 성공 시 `EndParry()`를 호출하여 활성 패링 판정 즉시 소비
+- 패링 판정 소비 시 기존 `ParryCooldownTimer` 유지
+- 기존 반격 타이머를 정리한 뒤 새로운 반격 가능 시간 시작
+- 반격 가능 시간 종료 후 `bCanParryCounter`를 자동으로 비활성화
+- 플레이어 사망 시 반격 가능 타이머 제거
+- 플레이어 사망 시 반격 가능 상태 초기화
+- 반격 가능 시간 확인을 위한 임시 출력 로그 추가
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Parry Counter Window Duration | 1.0초 |
+| Parry Window Consumption | 성공 즉시 |
+| Parry Cooldown Reset | 하지 않음 |
+| Counter Window Recovery | 타이머 종료 후 자동 비활성화 |
+| Death Cleanup | 타이머 및 상태 제거 |
+
+### 상태 처리
+
+```text
+적 공격 적중
+→ 플레이어 패링 상태 확인
+→ 적 공격 패링 가능 상태 확인
+
+두 상태가 모두 활성화
+→ bParrySucceeded = true
+→ PlayerCharacter->HandleSuccessfulParry()
+→ EndParry()
+→ bIsParrying = false
+→ ParryWindowTimer 제거
+→ 기존 ParryCooldownTimer 유지
+→ StartParryCounterWindow()
+→ bCanParryCounter = true
+→ ParryCounterWindowTimer 시작
+→ StartParryStun()
+→ 적 공격과 이동 중단
+→ 적 경직 시작
+
+반격 가능 타이머 종료
+→ EndParryCounterWindow()
+→ ParryCounterWindowTimer 제거
+→ bCanParryCounter = false
+
+플레이어 사망
+→ ParryCounterWindowTimer 제거
+→ bCanParryCounter = false
+→ 반격 가능 상태 복구 차단
+
+```
+
+### 테스트 결과
+
+- 정확한 타이밍에 패링하면 플레이어 피해가 무효화된다.
+- 패링 성공 시 현재 활성 패링 판정이 즉시 소비된다.
+- 패링 성공 후 Parry Counter Window Opened 로그가 출력된다.
+- 설정된 시간이 지나면 Parry Counter Window Closed 로그가 출력된다.
+- 패링 성공 후 적 경직이 기존과 동일하게 정상 작동한다.
+- 반격 가능 시간이 적 경직 상태와 함께 정상적으로 진행된다.
+- 패링 성공 소비 이후에도 기존 패링 쿨다운이 유지된다.
+- 패링 성공 직후 새로운 패링을 연속으로 사용할 수 없다.
+- 패링에 실패하면 기존 피해와 플레이어 피격 반응이 정상적으로 적용된다.
+- 패링 성공과 반격 가능 시간 처리를 여러 번 반복해도 정상적으로 초기화된다.
+
+### 현재 한계 및 향후 개선
+
+- 현재 bCanParryCounter는 반격 가능 여부만 나타내며 실제 공격에는 아직 사용되지 않는다.
+- 반격 가능 시간에 공격해도 현재는 기존 일반 공격과 동일하게 처리된다.
+- 패링 반격 전용 공격 몽타주와 피해량이 없다.
+- 반격 성공 시 적에게 추가 피해나 별도의 반응을 적용하지 않는다.
+- 패링 성공 애니메이션, 사운드, 이펙트 및 UI 피드백이 없다.
+- 반격 가능 상태를 화면에서 확인할 수 있는 UI가 없다.
+- 다음 단계에서는 플레이어 공격 시 CanParryCounter()를 확인하여 일반 공격과 패링 반격을 구분할 예정이다.
+
