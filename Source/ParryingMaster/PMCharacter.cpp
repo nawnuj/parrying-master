@@ -494,6 +494,16 @@ void APMCharacter::Attack()
         return;
     }
 
+    /*
+     * 반격 가능 시간 안에 공격했다면
+     * 일반 콤보 대신 반격 공격으로 시작합니다.
+     */
+    if (CanParryCounter())
+    {
+        StartParryCounterAttack();
+        return;
+    }
+
     StartCombo();
 }
 
@@ -653,6 +663,32 @@ void APMCharacter::EndParryCounterWindow()
     bCanParryCounter = false;
 }
 
+void APMCharacter::StartParryCounterAttack()
+{
+    if (!bCanParryCounter)
+    {
+        return;
+    }
+
+    /*
+     * 공격 버튼을 누른 시점에 반격 가능 상태를 소비합니다.
+     * 타이머도 함께 제거되므로 반격 기회가 다시 종료되지 않습니다.
+     */
+    EndParryCounterWindow();
+
+    /*
+     * 실제 피해 판정은 AttackHit Notify에서 실행되므로
+     * 이번 공격이 반격이라는 정보를 그때까지 보관합니다.
+     */
+    bIsParryCounterAttacking = true;
+
+    /*
+     * 아직 반격 전용 몽타주가 없으므로
+     * 기존 콤보의 Attack1을 사용합니다.
+     */
+    StartCombo();
+}
+
 void APMCharacter::StartCombo()
 {
     CurrentComboIndex = 1;
@@ -727,6 +763,21 @@ void APMCharacter::HandleMontageEnded(
 
 void APMCharacter::PerformAttackTrace()
 {
+    /*
+     * 이번 공격 판정이 패링 반격인지 먼저 저장합니다.
+     * 이후 상태를 즉시 소비하여 다음 콤보 타격에는
+     * 반격 피해가 반복되지 않게 합니다.
+     */
+    const bool bWasParryCounterAttack =
+        bIsParryCounterAttacking;
+
+    bIsParryCounterAttacking = false;
+
+    const float DamageToApply =
+        bWasParryCounterAttack
+        ? ParryCounterDamage
+        : AttackDamage;
+
     const FVector ForwardDirection =
         GetActorForwardVector();
 
@@ -809,7 +860,7 @@ void APMCharacter::PerformAttackTrace()
 
             UGameplayStatics::ApplyDamage(
                 HitActor,
-                AttackDamage,
+                DamageToApply,
                 GetController(),
                 this,
                 UDamageType::StaticClass()
@@ -975,6 +1026,7 @@ void APMCharacter::HandleDeath()
     bIsParrying = false;
     bCanParry = false;
     bCanParryCounter = false;
+    bIsParryCounterAttacking = false;
 
     StopSprint();
     StopJumping();
@@ -1081,8 +1133,10 @@ void APMCharacter::TryContinueCombo()
 void APMCharacter::ResetCombo()
 {
     bIsAttacking = false;
+    bIsParryCounterAttacking = false;
     CurrentComboIndex = 0;
     bCanQueueCombo = false;
     bComboInputQueued = false;
 }
+
 

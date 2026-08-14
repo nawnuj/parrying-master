@@ -193,6 +193,15 @@ protected:
     )
     float AttackDamage = 20.0f;
 
+    // 패링 반격 공격으로 주는 피해량입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Parry",
+        meta = (ClampMin = "0.0")
+    )
+    float ParryCounterDamage = 40.0f;
+
     // 캐릭터 앞쪽으로 검사할 공격 거리입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -299,6 +308,9 @@ private:
     // 패링 반격 가능 시간을 종료합니다.
     void EndParryCounterWindow();
 
+    // 반격 가능 상태를 소비하고 반격 공격을 시작합니다.
+    void StartParryCounterAttack();
+
     // 3단 콤보의 첫 번째 공격을 시작합니다.
     void StartCombo();
 
@@ -363,6 +375,9 @@ private:
 
     // 현재 패링 반격을 사용할 수 있는지 나타냅니다.
     bool bCanParryCounter = false;
+
+    // 현재 시작된 공격이 패링 반격 공격인지 나타냅니다.
+    bool bIsParryCounterAttacking = false;
 
     // 패링 판정 종료 시간을 관리합니다.
     FTimerHandle ParryWindowTimer;
