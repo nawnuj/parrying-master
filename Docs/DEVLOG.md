@@ -1308,3 +1308,134 @@ AI Controller Tick
 - 반격 가능 상태를 화면에서 확인할 수 있는 UI가 없다.
 - 다음 단계에서는 플레이어 공격 시 CanParryCounter()를 확인하여 일반 공격과 패링 반격을 구분할 예정이다.
 
+---
+
+## 3주차 6일차 — 반격 공격과 강화 피해 적용
+
+### 목표
+
+패링 성공 후 생성된 반격 가능 상태를 실제 플레이어 공격과 연결하고, 반격 가능 시간 안에 공격하면 기존 `Attack1`을 재사용하여 첫 타격에 강화된 피해를 적용한다.
+
+### 구현 내용
+
+- 패링 반격 공격의 피해량을 관리하는 `ParryCounterDamage` 추가
+- 현재 시작된 공격이 패링 반격인지 관리하는 `bIsParryCounterAttacking` 추가
+- 반격 기회를 소비하고 공격을 시작하는 `StartParryCounterAttack()` 구현
+- `Attack()`에서 일반 콤보 시작 전에 `CanParryCounter()` 확인
+- 반격 가능 시간 안에 공격하면 일반 콤보 대신 반격 공격 시작
+- 공격 입력 시 `EndParryCounterWindow()`를 호출하여 반격 기회 즉시 소비
+- 반격 가능 타이머 제거 및 `bCanParryCounter` 비활성화
+- 별도의 반격 몽타주 없이 기존 공격 몽타주의 `Attack1` Section 재사용
+- 공격 입력과 `AttackHit` Notify 사이에 반격 여부를 보관
+- `PerformAttackTrace()` 시작 시 현재 반격 공격 상태를 지역 변수에 저장
+- 반격 공격이면 `ParryCounterDamage` 적용
+- 일반 공격이면 기존 `AttackDamage` 적용
+- 첫 번째 공격 판정 이후 반격 공격 상태 즉시 소비
+- 후속 `Attack2`, `Attack3`에는 기존 일반 피해 적용
+- 공격이 타격 전에 취소될 경우 `ResetCombo()`에서 반격 공격 상태 초기화
+- 플레이어 사망 시 반격 공격 상태 초기화
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Normal Attack Damage | 20 |
+| Parry Counter Damage | 40 |
+| Counter Animation | 기존 Attack1 재사용 |
+| Counter Hit Notify | 기존 AttackHit 재사용 |
+| Counter Consumption | 공격 입력 시 |
+| Counter Damage Consumption | 첫 AttackHit 판정 시 |
+| Follow-up Combo Damage | 일반 피해 20 |
+
+### 상태 구분
+
+`bCanParryCounter`는 현재 공격 버튼을 눌렀을 때 반격 공격을 시작할 수 있는지를 나타낸다.
+
+```text
+bCanParryCounter = true
+→ 반격 입력을 받을 수 있음
+
+bIsParryCounterAttacking은 이미 시작된 현재 공격이 패링 반격 공격인지를 나타낸다.
+
+bIsParryCounterAttacking = true
+→ AttackHit Notify에서 반격 피해 적용
+
+반격 가능 상태와 현재 반격 공격 상태를 분리한 이유는 공격 입력과 실제 피해 판정 사이에 시간 차이가 있기 때문이다.
+
+```
+
+### 상태 처리
+
+```text
+패링 성공
+→ bCanParryCounter = true
+→ ParryCounterWindowTimer 시작
+
+반격 가능 시간 안에 공격 입력
+→ Attack()
+→ CanParryCounter() == true
+→ StartParryCounterAttack()
+→ EndParryCounterWindow()
+→ ParryCounterWindowTimer 제거
+→ bCanParryCounter = false
+→ bIsParryCounterAttacking = true
+→ StartCombo()
+→ 기존 Attack1 재생
+
+AttackHit Notify
+→ PerformAttackTrace()
+→ bIsParryCounterAttacking 값을 지역 변수에 저장
+→ bIsParryCounterAttacking = false
+→ ParryCounterDamage 40 적용
+
+후속 콤보 입력
+→ Attack2 또는 Attack3 재생
+→ bIsParryCounterAttacking == false
+→ 일반 AttackDamage 20 적용
+
+반격 가능 시간 만료 후 공격
+→ bCanParryCounter == false
+→ 기존 StartCombo()
+→ 일반 AttackDamage 20 적용
+
+공격 취소 또는 몽타주 종료
+→ ResetCombo()
+→ bIsParryCounterAttacking = false
+
+플레이어 사망
+→ bCanParryCounter = false
+→ bIsParryCounterAttacking = false
+→ 반격 가능 타이머 제거
+
+```
+
+### 반격 소비 시점
+
+반격 기회는 적에게 실제로 적중했을 때가 아니라 플레이어가 공격 버튼을 누른 시점에 소비한다.
+
+따라서 반격 공격이 빗나가거나 타격 전에 취소되더라도 이미 사용한 반격 기회는 복구되지 않는다. 이를 통해 하나의 패링 성공으로 반격 공격을 반복해서 시도하는 것을 방지한다.
+
+반격 피해 상태는 AttackHit Notify가 실행될 때 한 번 소비한다. 따라서 반격 공격에서 콤보를 이어가더라도 강화 피해는 첫 타격에만 적용된다.
+
+### 테스트 결과
+
+- 반격 가능 상태가 아닐 때 공격하면 기존 일반 공격이 실행된다.
+- 일반 공격의 피해량은 기존과 동일하게 20이 적용된다.
+- 패링 성공 후 반격 가능 시간 안에 공격하면 기존 Attack1이 재생된다.
+- 반격 공격의 첫 타격에 피해 40이 적용된다.
+- 반격 공격을 시작하면 반격 가능 상태와 타이머가 즉시 종료된다.
+- 반격 가능 시간이 끝난 뒤 공격하면 일반 피해 20이 적용된다.
+- 반격 공격 상태가 첫 번째 공격 판정 이후 정상적으로 소비된다.
+- 공격 취소 및 사망 처리에서 반격 공격 상태가 초기화된다.
+- 기존 패링 성공, 적 공격 중단 및 경직 기능이 정상적으로 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 반격 공격은 별도의 애니메이션 없이 기존 Attack1을 재사용한다.
+- 반격 공격 전용 사운드, 이펙트 및 UI 피드백이 없다.
+- 일반 공격과 반격 공격의 타격 반응이 동일하다.
+- 반격 공격이 빗나가거나 타격 전에 취소되어도 반격 기회는 소비된다.
+- 하나의 반격 Sweep으로 여러 적을 감지하면 감지된 모든 적에게 피해 40이 적용된다.
+- 현재 적 경직 시간이 약 1초이므로 실제 적을 상대로 3단 콤보까지 연결하기 어렵다.
+- 후속 콤보 연결 난이도는 적 경직 시간, 공격 속도 및 적 공격 재개 시점과 함께 조정해야 한다.
+- 이후 반격 전용 몽타주, 적의 반격 피격 반응 및 시각적 피드백을 구현할 예정이다.
