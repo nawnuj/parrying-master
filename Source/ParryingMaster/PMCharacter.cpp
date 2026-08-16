@@ -512,6 +512,76 @@ bool APMCharacter::IsParrying() const
     return bIsParrying;
 }
 
+bool APMCharacter::CanParryAttackFrom(
+    const AActor* Attacker
+) const
+{
+    // 현재 패링 중이 아니면 방향과 관계없이 실패합니다.
+    if (!bIsParrying)
+    {
+        return false;
+    }
+
+    // 공격자가 없다면 방향을 계산할 수 없습니다.
+    if (!Attacker)
+    {
+        return false;
+    }
+
+    /*
+     * 높이 차이는 방향 판정에서 제외하고
+     * 플레이어에서 공격자로 향하는 수평 방향만 계산합니다.
+     */
+    FVector DirectionToAttacker =
+        Attacker->GetActorLocation()
+        - GetActorLocation();
+
+    DirectionToAttacker.Z = 0.0f;
+
+    /*
+     * 공격자와 플레이어의 수평 위치가 거의 같다면
+     * 유효한 방향을 계산할 수 없습니다.
+     */
+    if (DirectionToAttacker.IsNearlyZero())
+    {
+        return false;
+    }
+
+    DirectionToAttacker.Normalize();
+
+    // 플레이어의 수평 정면 방향입니다.
+    const FVector ForwardDirection =
+        GetActorForwardVector().GetSafeNormal2D();
+
+    /*
+     *  1.0 : 정면
+     *  0.0 : 옆
+     * -1.0 : 후방
+     */
+    const float FacingDot =
+        FVector::DotProduct(
+            ForwardDirection,
+            DirectionToAttacker
+        );
+
+    /*
+     * ParryFacingAngle은 전체 각도이므로
+     * 정면을 중심으로 비교할 때는 절반을 사용합니다.
+     */
+    const float HalfAngleRadians =
+        FMath::DegreesToRadians(
+            ParryFacingAngle * 0.5f
+        );
+
+    const float MinimumFacingDot =
+        FMath::Cos(HalfAngleRadians);
+
+    const bool bIsWithinParryAngle =
+        FacingDot >= MinimumFacingDot;
+
+    return bIsWithinParryAngle;
+}
+
 bool APMCharacter::CanParryCounter() const
 {
     return bCanParryCounter;

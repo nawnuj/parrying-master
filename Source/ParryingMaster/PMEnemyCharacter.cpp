@@ -402,15 +402,19 @@ void APMEnemyCharacter::PerformAttackTrace()
         APMCharacter* PlayerCharacter =
             Cast<APMCharacter>(HitActor);
 
-        const bool bPlayerIsParrying =
+        /*
+        * 플레이어가 현재 패링 중이면서
+        * 공격한 적이 패링 가능 각도 안에 있는지 확인합니다.
+        */
+        const bool bPlayerCanParryAttack =
             PlayerCharacter
-            && PlayerCharacter->IsParrying();
+            && PlayerCharacter->CanParryAttackFrom(this);
 
         const bool bAttackIsParryable =
             IsAttackParryable();
 
         const bool bParrySucceeded =
-            bPlayerIsParrying
+            bPlayerCanParryAttack
             && bAttackIsParryable;
 
         if (bParrySucceeded)

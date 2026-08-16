@@ -30,6 +30,11 @@ public:
     )
     bool IsParrying() const;
 
+    // 공격자가 현재 패링 가능 각도 안에 있는지 반환합니다.
+    bool CanParryAttackFrom(
+        const AActor* Attacker
+    ) const;
+
     // 패링 성공을 소비하고 반격 가능 시간을 시작합니다.
     void HandleSuccessfulParry();
 
@@ -183,6 +188,19 @@ protected:
         meta = (ClampMin = "0.01")
     )
     float ParryCounterWindowDuration = 1.0f;
+
+
+    // 플레이어 정면을 기준으로 패링을 허용하는 전체 각도입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Parry",
+        meta = (
+            ClampMin = "0.0",
+            ClampMax = "360.0"
+            )
+    )
+    float ParryFacingAngle = 120.0f;
 
     // 한 번의 기본 공격으로 주는 피해량입니다.
     UPROPERTY(
