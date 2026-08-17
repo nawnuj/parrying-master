@@ -494,6 +494,7 @@ void APMCharacter::Attack()
         return;
     }
 
+    FaceAttackDirection();
     /*
      * 반격 가능 시간 안에 공격했다면
      * 일반 콤보 대신 반격 공격으로 시작합니다.
@@ -505,6 +506,39 @@ void APMCharacter::Attack()
     }
 
     StartCombo();
+}
+
+void APMCharacter::FaceAttackDirection()
+{
+    /*
+     * 마지막으로 입력된 이동 방향을 가져옵니다.
+     * 이동 입력이 있다면 해당 방향으로 공격합니다.
+     */
+    FVector AttackDirection =
+        GetLastMovementInputVector();
+
+    // 수평 방향만 사용합니다.
+    AttackDirection.Z = 0.0f;
+
+    AttackDirection =
+        AttackDirection.GetSafeNormal();
+
+    /*
+     * 이동 입력이 없다면 캐릭터의 현재 방향을
+     * 그대로 유지합니다.
+     */
+    if (AttackDirection.IsNearlyZero())
+    {
+        return;
+    }
+
+    const FRotator AttackRotation(
+        0.0f,
+        AttackDirection.Rotation().Yaw,
+        0.0f
+    );
+
+    SetActorRotation(AttackRotation);
 }
 
 bool APMCharacter::IsParrying() const

@@ -310,6 +310,9 @@ private:
 
     // 기본 공격을 시작합니다.
     void Attack();
+    
+    // 공격을 시작하기 전에 이동 입력 방향을 바라봅니다.
+    void FaceAttackDirection();
 
     // 패링 입력을 받아 짧은 패링 판정을 시작합니다.
     void StartParry();
