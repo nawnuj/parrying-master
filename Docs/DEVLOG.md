@@ -1662,3 +1662,99 @@ AND 적 공격이 패링 가능한 구간
 - 공격 방향으로 캐릭터를 전진시키는 기능이 없다.
 - 타깃을 기준으로 자동 회전하거나 추적하는 기능이 없다.
 - 이후 콤보 단계별 방향 보정과 공격 전진 이동을 구현할 예정이다.
+
+---
+
+## 4주차 2일차 — 콤보 단계별 방향 보정과 공격 전진 이동
+
+### 목표
+
+첫 공격에만 적용되던 이동 입력 방향 보정을 Attack2와 Attack3까지 확장하고, 각 공격 단계가 시작될 때 캐릭터가 공격 방향으로 짧게 전진하도록 구현한다.
+
+### 구현 내용
+
+- 공격 전진 강도를 관리하는 `AttackLungeStrength` 추가
+- 기본 공격 전진 강도를 250으로 설정
+- 공격 방향으로 전진시키는 `ApplyAttackLunge()` 구현
+- 현재 캐릭터 정면을 공격 전진 방향으로 사용
+- 높이 차이를 제외하기 위해 전진 방향의 Z축 제거
+- `GetSafeNormal()`을 이용해 전진 방향 정규화
+- 전진 강도가 0 이하이거나 유효한 방향이 없으면 실행 중단
+- `CharacterMovementComponent`의 `AddImpulse()`를 이용해 수평 속도 추가
+- 질량과 관계없이 동일한 속도 변화를 적용하도록 `bVelocityChange`를 true로 설정
+- `StartCombo()`에서 공격 몽타주 재생 성공 후 전진 이동 적용
+- 공격 몽타주 재생 실패 시 `ResetCombo()` 이후 즉시 반환
+- `TryContinueCombo()`에서 다음 Section 연결 전에 `FaceAttackDirection()` 호출
+- Attack2와 Attack3 전환 시 현재 이동 입력 방향으로 재회전
+- 다음 콤보 Section 연결이 확정된 뒤 공격 전진 이동 적용
+- 일반 Attack1과 패링 반격 Attack1에 동일한 전진 이동 적용
+- 기존 콤보 입력 예약 및 Section 연결 구조 유지
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Attack Lunge Strength | 250 |
+| Lunge Direction | 캐릭터 현재 정면 |
+| Vertical Movement | 사용하지 않음 |
+| Movement Method | AddImpulse |
+| Velocity Change | true |
+| Attack1 Lunge | 적용 |
+| Attack2 Lunge | 적용 |
+| Attack3 Lunge | 적용 |
+| Parry Counter Lunge | 적용 |
+
+### 상태 처리
+
+```text
+새로운 Attack1 시작
+→ 기존 공격 가능 조건 확인
+→ FaceAttackDirection()
+→ 이동 입력 방향으로 회전
+→ 일반 공격 또는 패링 반격 결정
+→ StartCombo()
+→ Attack1 Section 재생
+→ 몽타주 재생 성공 확인
+→ ApplyAttackLunge()
+→ 캐릭터 정면으로 짧게 전진
+
+후속 콤보 입력
+→ bComboInputQueued = true
+→ ComboWindowClose
+→ TryContinueCombo()
+→ 다음 Section 유효성 확인
+→ FaceAttackDirection()
+→ 현재 이동 입력 방향으로 재회전
+→ Montage_SetNextSection()
+→ CurrentComboIndex 증가
+→ ApplyAttackLunge()
+→ 새로운 공격 방향으로 짧게 전진
+
+몽타주 재생 실패
+→ ResetCombo()
+→ 함수 즉시 종료
+→ 공격 전진 적용하지 않음
+```
+
+### 테스트 결과
+
+- Attack1 시작 시 이동 입력 방향으로 캐릭터가 회전한다.
+- Attack2 연결 시 현재 이동 입력 방향으로 다시 회전한다.
+- Attack3 연결 시 현재 이동 입력 방향으로 다시 회전한다.
+- 이동 입력이 없으면 현재 캐릭터 방향을 유지한다.
+- 각 공격 단계에서 캐릭터가 바라보는 방향으로 전진한다.
+- 패링 반격 Attack1에도 전진 이동이 정상적으로 적용된다.
+- 방향 보정 이후 기존 3단 콤보 Section 연결이 정상적으로 유지된다.
+- 기존 공격 피해와 패링 반격 피해가 정상적으로 적용된다.
+- 벽이나 바닥의 기존 충돌 처리가 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 공격 전진은 AddImpulse()를 한 번 적용하는 방식이라 순간적으로 튀는 느낌이 있다.
+- 현재 설정값 250에서는 전진이 분명하지만 순간이동처럼 느껴질 수 있다.
+- 공격 애니메이션의 실제 발 움직임과 전진 시점이 완전히 일치하지 않는다.
+- Attack2와 Attack3의 전진은 다음 Section이 연결되는 시점에 적용된다.
+- 모든 콤보 단계와 패링 반격이 동일한 전진 강도를 사용한다.
+- 벽에 가까운 상태에서는 전진 거리가 짧아질 수 있다.
+- 기존 속도와 공격 전진 속도가 합쳐져 이동 감각이 달라질 수 있다.
+- 이후 공격 단계별 전진 강도, Montage Notify 또는 Root Motion 기반 이동으로 개선할 예정이다.
