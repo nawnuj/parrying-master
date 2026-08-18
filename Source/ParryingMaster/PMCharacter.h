@@ -145,6 +145,15 @@ protected:
     )
     TObjectPtr<UAnimMontage> AttackMontage;
 
+    // 공격 단계가 시작될 때 전진하는 힘입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Movement",
+        meta = (ClampMin = "0.0")
+    )
+    float AttackLungeStrength = 250.0f;
+
     // 피해를 받았을 때 재생할 피격 몽타주입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -310,9 +319,12 @@ private:
 
     // 기본 공격을 시작합니다.
     void Attack();
-    
+
     // 공격을 시작하기 전에 이동 입력 방향을 바라봅니다.
     void FaceAttackDirection();
+
+    // 캐릭터를 현재 공격 방향으로 짧게 전진시킵니다.
+    void ApplyAttackLunge();
 
     // 패링 입력을 받아 짧은 패링 판정을 시작합니다.
     void StartParry();
@@ -359,7 +371,7 @@ private:
         UAnimMontage* Montage,
         bool bInterrupted
     );
-   
+
     // 피격 여부를 검사할 수 있도록 점프 입력을 받습니다.
     void StartJump();
 

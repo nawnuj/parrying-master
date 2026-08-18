@@ -541,6 +541,37 @@ void APMCharacter::FaceAttackDirection()
     SetActorRotation(AttackRotation);
 }
 
+void APMCharacter::ApplyAttackLunge()
+{
+    if (AttackLungeStrength <= 0.0f)
+    {
+        return;
+    }
+
+    FVector LungeDirection =
+        GetActorForwardVector();
+
+    LungeDirection.Z = 0.0f;
+
+    LungeDirection =
+        LungeDirection.GetSafeNormal();
+
+    if (LungeDirection.IsNearlyZero())
+    {
+        return;
+    }
+
+    /*
+     * Character Movement에 수평 속도를 추가합니다.
+     * true를 사용하여 캐릭터 질량과 관계없이
+     * 설정한 값을 속도 변화로 적용합니다.
+     */
+    GetCharacterMovement()->AddImpulse(
+        LungeDirection * AttackLungeStrength,
+        true
+    );
+}
+
 bool APMCharacter::IsParrying() const
 {
     return bIsParrying;
@@ -813,7 +844,10 @@ void APMCharacter::StartCombo()
     if (MontageDuration <= 0.0f)
     {
         ResetCombo();
+        return;
     }
+
+    ApplyAttackLunge();
 }
 
 void APMCharacter::HandleMontageNotifyBegin(
@@ -1217,6 +1251,11 @@ void APMCharacter::TryContinueCombo()
         ResetCombo();
         return;
     }
+    /*
+    * 다음 콤보 단계로 넘어가기 전에
+    * 현재 이동 입력 방향을 다시 바라봅니다.
+    */
+    FaceAttackDirection();
 
     /*
      * 현재 Section이 끝난 뒤 다음 Section으로
@@ -1229,6 +1268,8 @@ void APMCharacter::TryContinueCombo()
     );
 
     ++CurrentComboIndex;
+
+    ApplyAttackLunge();
 
     // 사용한 예약 입력을 제거합니다.
     bComboInputQueued = false;
