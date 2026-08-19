@@ -431,6 +431,8 @@ void APMCharacter::Dodge()
     // 쿨다운이 끝날 때까지 추가 회피를 막습니다.
     bCanDodge = false;
 
+    StartDodgeInvincibility();
+
     // 캐릭터를 회피 방향으로 밀어냅니다.
     LaunchCharacter(
         DodgeDirection * DodgeStrength,
@@ -451,6 +453,38 @@ void APMCharacter::Dodge()
 void APMCharacter::ResetDodge()
 {
     bCanDodge = true;
+}
+
+void APMCharacter::StartDodgeInvincibility()
+{
+    GetWorldTimerManager().ClearTimer(
+        DodgeInvincibilityTimer
+    );
+
+    if (DodgeInvincibilityDuration <= 0.0f)
+    {
+        bIsDodgeInvincible = false;
+        return;
+    }
+
+    bIsDodgeInvincible = true;
+
+    GetWorldTimerManager().SetTimer(
+        DodgeInvincibilityTimer,
+        this,
+        &APMCharacter::EndDodgeInvincibility,
+        DodgeInvincibilityDuration,
+        false
+    );
+}
+
+void APMCharacter::EndDodgeInvincibility()
+{
+    GetWorldTimerManager().ClearTimer(
+        DodgeInvincibilityTimer
+    );
+
+    bIsDodgeInvincible = false;
 }
 
 void APMCharacter::Attack()
@@ -1057,6 +1091,26 @@ void APMCharacter::CancelAttack()
     ResetCombo();
 }
 
+float APMCharacter::TakeDamage(
+    float DamageAmount,
+    const FDamageEvent& DamageEvent,
+    AController* EventInstigator,
+    AActor* DamageCauser
+)
+{
+    if (bIsDodgeInvincible)
+    {
+        return 0.0f;
+    }
+
+    return Super::TakeDamage(
+        DamageAmount,
+        DamageEvent,
+        EventInstigator,
+        DamageCauser
+    );
+}
+
 void APMCharacter::HandleHealthChanged(
     float CurrentHealth,
     float MaxHealth
@@ -1159,12 +1213,17 @@ void APMCharacter::HandleDeath()
         ParryCounterWindowTimer
     );
 
+    GetWorldTimerManager().ClearTimer(
+        DodgeInvincibilityTimer
+    );
+
     bIsHitReacting = false;
     bCanDodge = false;
     bIsParrying = false;
     bCanParry = false;
     bCanParryCounter = false;
     bIsParryCounterAttacking = false;
+    bIsDodgeInvincible = false;
 
     StopSprint();
     StopJumping();

@@ -45,6 +45,14 @@ public:
     )
     bool CanParryCounter() const;
 
+    // 회피 무적 상태를 확인한 뒤 피해를 처리합니다.
+    virtual float TakeDamage(
+        float DamageAmount,
+        const FDamageEvent& DamageEvent,
+        AController* EventInstigator,
+        AActor* DamageCauser
+    ) override;
+
 protected:
     // 게임이 시작될 때 한 번 실행됩니다.
     virtual void BeginPlay() override;
@@ -292,6 +300,15 @@ protected:
     )
     float DodgeCooldown = 0.6f;
 
+    // 회피 시작 후 피해를 무효화하는 시간입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Dodge",
+        meta = (ClampMin = "0.0")
+    )
+    float DodgeInvincibilityDuration = 0.25f;
+
     // 플레이어의 체력을 관리하는 컴포넌트입니다.
     UPROPERTY(
         VisibleAnywhere,
@@ -316,6 +333,12 @@ private:
 
     // 쿨다운이 끝나면 다시 회피할 수 있게 합니다.
     void ResetDodge();
+
+    // 회피 무적 시간을 시작합니다.
+    void StartDodgeInvincibility();
+
+    // 회피 무적 시간을 종료합니다.
+    void EndDodgeInvincibility();
 
     // 기본 공격을 시작합니다.
     void Attack();
@@ -397,6 +420,9 @@ private:
     // 현재 회피를 사용할 수 있는지 나타냅니다.
     bool bCanDodge = true;
 
+    // 현재 회피 무적 상태인지 나타냅니다.
+    bool bIsDodgeInvincible = false;
+
     // 현재 공격 중인지 나타냅니다.
     bool bIsAttacking = false;
 
@@ -439,6 +465,9 @@ private:
 
     // 회피 쿨다운을 관리하는 타이머입니다.
     FTimerHandle DodgeCooldownTimer;
+
+    // 회피 무적 종료 시점을 관리합니다.
+    FTimerHandle DodgeInvincibilityTimer;
 
     // 마지막으로 확인한 체력입니다.
     float PreviousHealth = 0.0f;
