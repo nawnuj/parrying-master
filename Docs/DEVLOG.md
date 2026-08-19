@@ -1758,3 +1758,131 @@ AND 적 공격이 패링 가능한 구간
 - 벽에 가까운 상태에서는 전진 거리가 짧아질 수 있다.
 - 기존 속도와 공격 전진 속도가 합쳐져 이동 감각이 달라질 수 있다.
 - 이후 공격 단계별 전진 강도, Montage Notify 또는 Root Motion 기반 이동으로 개선할 예정이다.
+
+---
+
+## 4주차 3일차 — 회피 무적 시간과 피해 차단
+
+### 목표
+
+플레이어가 적의 공격 타이밍에 맞춰 회피하면 짧은 시간 동안 피해를 받지 않도록 회피 무적 상태를 구현하고, 기존 회피 쿨다운과 무적 시간을 독립적으로 관리한다.
+
+### 구현 내용
+
+- 회피 무적 지속 시간을 관리하는 `DodgeInvincibilityDuration` 추가
+- 기본 회피 무적 시간을 0.25초로 설정
+- 현재 회피 무적 상태를 나타내는 `bIsDodgeInvincible` 추가
+- 회피 무적 종료 시점을 관리하는 `DodgeInvincibilityTimer` 추가
+- 회피 무적을 시작하는 `StartDodgeInvincibility()` 구현
+- 회피 무적을 종료하는 `EndDodgeInvincibility()` 구현
+- 새로운 회피가 시작될 때 기존 무적 타이머 제거
+- 무적 시간이 0 이하이면 무적 상태를 활성화하지 않도록 처리
+- 회피 이동 직전에 무적 시간 시작
+- `APMCharacter::TakeDamage()` 재정의
+- 무적 중에는 `Super::TakeDamage()`를 호출하지 않고 0 반환
+- 무적 중 `OnTakeAnyDamage` 이벤트 발생 차단
+- 체력 컴포넌트까지 피해가 전달되지 않도록 처리
+- 무적이 아닐 때는 기존 `AActor::TakeDamage()` 흐름 유지
+- 사망 시 무적 타이머 제거
+- 사망 시 회피 무적 상태 초기화
+- 재사용 중인 `UPMHealthComponent`는 수정하지 않고 기존 구조 유지
+- 피해 차단 확인을 위한 임시 출력 로그 추가 후 제거
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Dodge Strength | 700 |
+| Dodge Cooldown | 0.6초 |
+| Dodge Invincibility Duration | 0.25초 |
+| Damage During Invincibility | 0 |
+| Health Change Event | 발생하지 않음 |
+| Hit Reaction | 발생하지 않음 |
+
+### 상태 구분
+
+`bCanDodge`는 새로운 회피를 시작할 수 있는지를 나타낸다.
+
+```text
+회피 시작
+→ bCanDodge = false
+→ DodgeCooldownTimer 시작
+
+0.6초 후
+→ ResetDodge()
+→ bCanDodge = true
+```
+
+`bIsDodgeInvincible`은 현재 피해를 무효화할 수 있는지를 나타낸다.
+
+```text
+회피 시작
+→ bIsDodgeInvincible = true
+→ DodgeInvincibilityTimer 시작
+
+0.25초 후
+→ EndDodgeInvincibility()
+→ bIsDodgeInvincible = false
+```
+따라서 회피 재사용 쿨다운과 실제 무적 시간은 서로 독립적으로 진행된다.
+
+### 피해 처리
+
+```text
+적 공격
+→ UGameplayStatics::ApplyDamage()
+→ APMCharacter::TakeDamage()
+
+bIsDodgeInvincible == true
+→ Super::TakeDamage() 호출하지 않음
+→ 0 반환
+→ OnTakeAnyDamage 발생하지 않음
+→ UPMHealthComponent에 피해 전달 없음
+→ 체력 감소 없음
+→ 피격 몽타주 없음
+→ 피격 경직 없음
+
+bIsDodgeInvincible == false
+→ Super::TakeDamage() 호출
+→ OnTakeAnyDamage 발생
+→ UPMHealthComponent가 피해 처리
+→ 체력 감소
+→ 체력 변경 이벤트 발생
+→ 피격 몽타주와 경직 실행
+```
+
+### 사망 처리
+
+```text
+플레이어 사망
+→ DodgeInvincibilityTimer 제거
+→ bIsDodgeInvincible = false
+→ bCanDodge = false
+→ 입력과 이동 비활성화
+→ 사망 후 무적 상태 복구 차단
+```
+
+### 테스트 결과
+
+- 회피하지 않고 적 공격을 맞으면 기존 피해 15가 적용된다.
+- 일반 피격 시 플레이어 체력 감소와 피격 반응이 정상적으로 실행된다.
+- 적의 공격 타이밍에 맞춰 회피하면 피해가 무효화된다.
+- 회피 무적 중에는 플레이어 체력이 감소하지 않는다.
+- 무적 중에는 체력 변경 이벤트가 발생하지 않는다.
+- 무적 중에는 피격 몽타주와 경직이 발생하지 않는다.
+- 무적 시간이 끝난 뒤 공격을 맞으면 기존 피해가 적용된다.
+- 회피 쿨다운 중 추가 회피 입력이 제한된다.
+- 회피 쿨다운이 끝나면 다시 회피할 수 있다.
+- 여러 번 회피해도 무적 타이머와 상태가 정상적으로 초기화된다.
+- 사망 시 무적 타이머와 상태가 정상적으로 정리된다.
+- 기존 이동, 공격, 패링과 반격 기능이 정상적으로 유지된다.
+- 임시 피해 차단 로그를 제거한 후에도 회피 무적이 정상적으로 작동한다.
+
+### 현재 한계 및 향후 개선
+
+- 무적 시간은 회피 애니메이션의 프레임이 아닌 회피 입력 시점부터 시작한다.
+- 회피 전용 몽타주와 Notify가 없어 정확한 동작 프레임과 무적 시간을 맞추지 못한다.
+- 무적 상태에서는 적 근접 공격뿐만 아니라 모든 종류의 TakeDamage() 피해가 차단된다.
+- 회피 동작의 시작, 무적 활성화 및 종료를 보여주는 시각적 피드백이 없다.
+- 현재 회피는 LaunchCharacter()를 이용한 이동만 사용하며 전용 애니메이션이 없다.
+- 이후 회피 몽타주와 Notify를 추가하여 무적 시작 및 종료 시점을 애니메이션과 연결할 예정이다.
