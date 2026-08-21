@@ -424,3 +424,57 @@ Is Falling → NOT → Should Do IKTrace 연결은 기존 상태를 유지했다
 - 상체 공격이 정상이라고 해서 하체까지 몽타주가 정상 적용된 것은 아니다.
 - 전신 공격 몽타주는 필요한 경우 Foot IK 이후에 적용해야 한다.
 - 애니메이션 문제는 원본 애니메이션, 몽타주 및 Animation Blueprint를 나누어 확인해야 한다.
+
+---
+
+## 회피 거리가 지나치게 길거나 시작할 때만 움직이는 문제
+
+### 발생 시점
+
+4주차 4일차 회피 전용 몽타주와 실제 회피 이동을 구현하는 과정에서 발생했다.
+
+### 증상
+
+- 회피 애니메이션을 재생하면 캐릭터가 지나치게 먼 거리를 빠르게 이동했다.
+- Root Motion을 비활성화한 뒤에는 회피 시작 순간에만 조금 이동했다.
+- 회피 애니메이션의 나머지 구간에서는 캐릭터가 제자리에서 움직이는 것처럼 보였다.
+
+### 원인
+
+처음에는 원본 애니메이션의 Root Motion 이동과 `LaunchCharacter()`의 코드 이동이 동시에 적용되어 실제 이동 거리가 중복됐다.
+
+Root Motion을 제거한 뒤에는 `LaunchCharacter()`가 수평 속도를 한 번만 적용했으며, 캐릭터가 지면에 있기 때문에 `GroundFriction`과 `BrakingDecelerationWalking`이 속도를 빠르게 감소시켰다.
+
+```text
+Root Motion 활성화
++ LaunchCharacter()
+→ 애니메이션 이동과 코드 이동 중복
+→ 지나치게 긴 회피 거리
+
+Root Motion 비활성화
++ 기존 지상 마찰 유지
+→ LaunchCharacter() 직후 빠르게 감속
+→ 회피 시작 부분에서만 이동
+```
+
+### 해결 방법
+
+원본 `MM_Dash`를 `A_Player_Dodge`로 복제하고 다음과 같이 설정했다.
+
+```text
+Enable Root Motion: 비활성화
+Force Root Lock: 활성화
+```
+
+`A_Player_Dodge`는 `AM_Player_Dodge`의 Montage Track에 배치하여 제자리 회피 자세만 재생하도록 했다.
+
+실제 이동은 `StartDodgeMovement()`에서 담당하며, 회피 이동 중 지상 마찰과 보행 감속을 일시적으로 0으로 변경했다. 0.25초가 지나면 `EndDodgeMovement()`에서 수평 속도를 제거하고 기존 설정을 복구했다.
+
+### 배운 점 
+
+- Root Motion 이동과 코드 기반 이동을 함께 사용하면 이동 거리가 중복될 수 있다.
+- LaunchCharacter()의 Strength는 이동 거리가 아니라 적용할 속도의 크기다.
+- 지상 캐릭터의 이동 결과는 Ground Friction과 Braking Deceleration의 영향을 받는다.
+- 회피 속도와 회피 이동 시간은 별도로 관리해야 체감을 조절하기 쉽다.
+- 애니메이션은 자세를 담당하고 코드는 실제 위치를 담당하도록 역할을 분리할 수 있다.
+- 임시로 변경한 Character Movement 설정은 회피 종료, 피격 및 사망 시 반드시 복구해야 한다.

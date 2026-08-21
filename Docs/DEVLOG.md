@@ -1886,3 +1886,167 @@ bIsDodgeInvincible == false
 - 회피 동작의 시작, 무적 활성화 및 종료를 보여주는 시각적 피드백이 없다.
 - 현재 회피는 LaunchCharacter()를 이용한 이동만 사용하며 전용 애니메이션이 없다.
 - 이후 회피 몽타주와 Notify를 추가하여 무적 시작 및 종료 시점을 애니메이션과 연결할 예정이다.
+
+---
+
+## 4주차 4일차 — 회피 몽타주와 지속형 회피 이동
+
+### 목표
+
+플레이어의 회피 방향에 맞는 전용 애니메이션을 재생하고, 애니메이션과 실제 캐릭터 이동의 역할을 분리하여 자연스러운 회피 이동을 구현한다.
+
+### 구현 내용
+
+- 회피 전용 Animation Sequence `A_Player_Dodge` 추가
+- 회피 전용 Animation Montage `AM_Player_Dodge` 추가
+- `DodgeMontage`와 `DodgeMontagePlayRate` 설정값 추가
+- 현재 회피 동작 상태를 나타내는 `bIsDodging` 추가
+- 회피 몽타주 재생이 끝나면 `EndDodge()`를 호출하도록 처리
+- 회피 중 이동, 공격, 패링 등의 새로운 행동 제한
+- 공격 또는 패링 중 회피할 수 없도록 조건 추가
+- 공중에서는 회피할 수 없도록 기존 조건 유지
+- 이동 입력이 있으면 입력 방향으로 회피
+- 이동 입력이 없으면 캐릭터 정면 방향으로 회피
+- 회피 시작 전에 캐릭터를 회피 방향으로 즉시 회전
+- 실제 회피 이동 지속 시간을 관리하는 `DodgeMovementDuration` 추가
+- 회피 이동 종료 시점을 관리하는 `DodgeMovementTimer` 추가
+- 실제 이동을 시작하는 `StartDodgeMovement()` 구현
+- 실제 이동을 종료하는 `EndDodgeMovement()` 구현
+- 회피 이동 중 지상 마찰과 보행 감속을 일시적으로 제거
+- 회피 종료 시 기존 지상 마찰과 보행 감속 복구
+- 회피 종료 시 수평 이동 속도 제거
+- 피격 또는 사망 시 진행 중인 회피 몽타주와 이동 상태 정리
+- 기존 회피 쿨다운과 무적 시간 기능 유지
+
+### 애니메이션 구성
+
+```text
+MM_Dash
+→ A_Player_Dodge로 복제
+→ Enable Root Motion 비활성화
+→ Force Root Lock 활성화
+
+A_Player_Dodge
+→ AM_Player_Dodge의 Montage Track에 배치
+
+BP_PMCharacter
+→ Dodge Montage에 AM_Player_Dodge 지정
+```
+
+A_Player_Dodge는 제자리 회피 자세만 담당하고 실제 캐릭터 위치는 코드에서 변경한다.
+
+```text
+A_Player_Dodge
+→ 제자리 회피 애니메이션
+
+AM_Player_Dodge
+→ 회피 애니메이션 재생과 종료 시점 관리
+
+StartDodgeMovement()
+→ 실제 캐릭터 이동 시작
+
+EndDodgeMovement()
+→ 실제 이동 종료 및 이동 설정 복구
+```
+
+### 회피 실행 흐름
+
+```text
+회피 입력
+→ 공통 행동 가능 여부 확인
+→ 패링 및 공격 상태 확인
+→ 회피 쿨다운 확인
+→ 공중 상태 확인
+→ 마지막 이동 입력 방향 계산
+
+이동 입력 있음
+→ 입력 방향을 회피 방향으로 사용
+
+이동 입력 없음
+→ 캐릭터 정면을 회피 방향으로 사용
+
+회피 방향 계산 완료
+→ 캐릭터 회전
+→ bCanDodge = false
+→ bIsDodging = true
+→ AM_Player_Dodge 재생
+→ 회피 무적 시간 시작
+→ StartDodgeMovement()
+→ 회피 쿨다운 타이머 시작
+```
+
+### 회피 이동 처리
+
+```text
+StartDodgeMovement()
+→ 기존 GroundFriction 저장
+→ 기존 BrakingDecelerationWalking 저장
+→ 지상 마찰과 감속을 0으로 변경
+→ LaunchCharacter() 실행
+→ DodgeMovementTimer 시작
+
+DodgeMovementDuration 종료
+→ EndDodgeMovement()
+→ 기존 지상 마찰 복구
+→ 기존 보행 감속 복구
+→ 수평 이동 속도 제거
+```
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Dodge Strength | 700 |
+| Dodge Movement Duration | 0.25초 |
+| Dodge Montage Play Rate (`BP_PMCharacter`) | 1.0 |
+| Dodge Cooldown | 0.6초 |
+| Dodge Invincibility Duration | 0.25초 |
+| Enable Root Motion | 비활성화 |
+| Force Root Lock | 활성화 |
+
+### 상태 정리
+
+회피 몽타주가 정상 종료되면 HandleMontageEnded()에서 EndDodge()를 호출한다.
+
+```text
+회피 몽타주 종료
+→ EndDodge()
+→ EndDodgeMovement()
+→ 지상 마찰과 감속 복구
+→ 수평 이동 정지
+→ bIsDodging = false
+```
+
+회피 도중 피격되거나 사망하면 CancelDodge()를 호출한다.
+
+```text
+피격 또는 사망
+→ 회피 몽타주 중단
+→ 회피 이동 종료
+→ 지상 마찰과 감속 복구
+→ 회피 무적 종료
+→ bIsDodging = false
+```
+
+### 테스트 결과
+
+- 이동 입력 방향으로 캐릭터가 회전한 뒤 회피한다.
+- 이동 입력이 없으면 캐릭터가 바라보는 방향으로 회피한다.
+- 회피 몽타주가 정상적으로 재생된다.
+- Root Motion 이동과 코드 이동이 중복되지 않는다.
+- 회피 시작 순간에만 움직이고 멈추던 문제가 해결됐다.
+- 설정된 시간 동안 회피 이동이 자연스럽게 유지된다.
+- 회피 종료 후 기존 지상 마찰과 감속이 정상적으로 복구된다.
+- 회피 종료 후 캐릭터가 계속 미끄러지지 않는다.
+- 회피 중 추가 이동과 다른 행동이 제한된다.
+- 기존 회피 쿨다운과 무적 시간이 정상적으로 작동한다.
+- 벽 방향으로 회피하면 캐릭터 충돌에 의해 정상적으로 막힌다.
+- 기존 공격, 콤보, 패링 및 반격 기능이 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 회피 이동은 애니메이션의 개별 프레임이 아닌 고정된 시간으로 관리한다.
+- 회피 이동 시간과 무적 시간이 각각 0.25초로 같지만 서로 다른 타이머를 사용한다.
+- 회피 이동 속도에 별도의 가속 및 감속 곡선이 적용되지 않는다.
+- 모든 방향에서 같은 회피 애니메이션을 사용한다.
+- 이후 방향별 회피 애니메이션, Montage Notify 또는 이동 Curve를 이용해 회피 동작을 세밀하게 조정할 수 있다.
