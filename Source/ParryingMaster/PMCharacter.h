@@ -282,6 +282,32 @@ protected:
     )
     float MouseSensitivity = 0.3f;
 
+    // 회피할 때 재생할 애니메이션 몽타주입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Dodge"
+    )
+    TObjectPtr<UAnimMontage> DodgeMontage;
+
+    // 회피 몽타주의 재생 속도입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Dodge",
+        meta = (ClampMin = "0.1")
+    )
+    float DodgeMontagePlayRate = 1.5f;
+
+    // 실제 회피 이동이 유지되는 시간입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Dodge",
+        meta = (ClampMin = "0.01")
+    )
+    float DodgeMovementDuration = 0.25f;
+
     // 캐릭터가 회피할 때 앞으로 밀려나는 힘입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -331,8 +357,22 @@ private:
     // 회피 입력을 처리합니다.
     void Dodge();
 
+    // 회피 방향으로 이동을 시작합니다.
+    void StartDodgeMovement(
+        const FVector& DodgeDirection
+    );
+
+    // 회피 이동을 끝내고 기존 감속 설정을 복구합니다.
+    void EndDodgeMovement();
+
     // 쿨다운이 끝나면 다시 회피할 수 있게 합니다.
     void ResetDodge();
+
+    // 회피 몽타주가 종료되면 회피 상태를 해제합니다.
+    void EndDodge();
+
+    // 피격 또는 사망 시 진행 중인 회피를 취소합니다.
+    void CancelDodge();
 
     // 회피 무적 시간을 시작합니다.
     void StartDodgeInvincibility();
@@ -420,6 +460,18 @@ private:
     // 현재 회피를 사용할 수 있는지 나타냅니다.
     bool bCanDodge = true;
 
+    // 회피 전 지상 마찰 값을 저장합니다.
+    float SavedGroundFriction = 0.0f;
+
+    // 회피 전 지상 감속 값을 저장합니다.
+    float SavedBrakingDecelerationWalking = 0.0f;
+
+    // 현재 회피 이동 설정이 적용되어 있는지 나타냅니다.
+    bool bIsDodgeMovementActive = false;
+
+    // 현재 회피 동작 중인지 나타냅니다.
+    bool bIsDodging = false;
+
     // 현재 회피 무적 상태인지 나타냅니다.
     bool bIsDodgeInvincible = false;
 
@@ -437,6 +489,9 @@ private:
 
     // 현재 시작된 공격이 패링 반격 공격인지 나타냅니다.
     bool bIsParryCounterAttacking = false;
+
+    // 회피 이동 종료 시점을 관리합니다.
+    FTimerHandle DodgeMovementTimer;
 
     // 패링 판정 종료 시간을 관리합니다.
     FTimerHandle ParryWindowTimer;

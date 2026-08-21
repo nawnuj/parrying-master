@@ -375,23 +375,34 @@ void APMCharacter::StopSprint()
 
 void APMCharacter::Dodge()
 {
+    // 피격 또는 사망 상태에서는 회피할 수 없습니다.
     if (!CanPerformAction())
     {
         return;
     }
 
+    // 패링 중에는 회피할 수 없습니다.
     if (bIsParrying)
     {
         return;
     }
 
-    // 아직 쿨다운 중이면 회피하지 않습니다.
+    /*
+     * 공격 몽타주와 회피 몽타주가 같은 Slot을 사용하므로
+     * 공격 중에는 회피를 시작하지 않습니다.
+     */
+    if (bIsAttacking)
+    {
+        return;
+    }
+
+    // 회피 쿨다운 중에는 다시 회피하지 않습니다.
     if (!bCanDodge)
     {
         return;
     }
 
-    // 공중에서는 회피하지 못하게 합니다.
+    // 공중에서는 회피할 수 없습니다.
     if (GetCharacterMovement()->IsFalling())
     {
         return;
@@ -404,22 +415,27 @@ void APMCharacter::Dodge()
     FVector DodgeDirection =
         GetLastMovementInputVector();
 
-    // 수평 방향으로만 회피하도록 높이값을 제거합니다.
     DodgeDirection.Z = 0.0f;
-    DodgeDirection = DodgeDirection.GetSafeNormal();
+
+    DodgeDirection =
+        DodgeDirection.GetSafeNormal();
 
     /*
-     * 이동 입력이 없는 정지 상태라면
-     * 캐릭터가 바라보는 방향으로 회피합니다.
+     * 이동 입력이 없다면 캐릭터가 현재
+     * 바라보는 방향으로 회피합니다.
      */
     if (DodgeDirection.IsNearlyZero())
     {
-        DodgeDirection = GetActorForwardVector();
-        DodgeDirection.Z = 0.0f;
-        DodgeDirection.Normalize();
+        DodgeDirection =
+            GetActorForwardVector().GetSafeNormal2D();
     }
 
-    // 회피 방향으로 캐릭터 몸을 돌립니다.
+    if (DodgeDirection.IsNearlyZero())
+    {
+        return;
+    }
+
+    // 회피 방향으로 캐릭터를 즉시 회전시킵니다.
     const FRotator DodgeRotation(
         0.0f,
         DodgeDirection.Rotation().Yaw,
@@ -428,19 +444,38 @@ void APMCharacter::Dodge()
 
     SetActorRotation(DodgeRotation);
 
-    // 쿨다운이 끝날 때까지 추가 회피를 막습니다.
+    // 회피 쿨다운을 시작합니다.
     bCanDodge = false;
 
+    // 회피 몽타주가 재생되는 동안 유지할 상태입니다.
+    bIsDodging = true;
+
+    float DodgeMontageDuration = 0.0f;
+
+    if (DodgeMontage)
+    {
+        DodgeMontageDuration =
+            PlayAnimMontage(
+                DodgeMontage,
+                DodgeMontagePlayRate
+            );
+    }
+
+    /*
+     * 몽타주가 없거나 재생에 실패해도
+     * 기존 회피 이동과 무적 기능은 실행합니다.
+     */
+    if (DodgeMontageDuration <= 0.0f)
+    {
+        bIsDodging = false;
+    }
+
+    // 회피 이동과 동시에 무적 시간을 시작합니다.
     StartDodgeInvincibility();
 
-    // 캐릭터를 회피 방향으로 밀어냅니다.
-    LaunchCharacter(
-        DodgeDirection * DodgeStrength,
-        true,
-        false
-    );
+    StartDodgeMovement(DodgeDirection);
 
-    // DodgeCooldown초 후 ResetDodge()를 실행합니다.
+    // 회피 재사용 쿨다운을 시작합니다.
     GetWorldTimerManager().SetTimer(
         DodgeCooldownTimer,
         this,
@@ -450,9 +485,109 @@ void APMCharacter::Dodge()
     );
 }
 
+void APMCharacter::StartDodgeMovement(
+    const FVector& DodgeDirection
+)
+{
+    UCharacterMovementComponent* MovementComponent =
+        GetCharacterMovement();
+
+    if (!MovementComponent)
+    {
+        return;
+    }
+
+    GetWorldTimerManager().ClearTimer(
+        DodgeMovementTimer
+    );
+
+    SavedGroundFriction =
+        MovementComponent->GroundFriction;
+
+    SavedBrakingDecelerationWalking =
+        MovementComponent->BrakingDecelerationWalking;
+
+    bIsDodgeMovementActive = true;
+
+    /*
+     * 회피 도중 지상 마찰과 감속으로 인해
+     * 이동이 즉시 멈추는 것을 방지합니다.
+     */
+    MovementComponent->GroundFriction = 0.0f;
+    MovementComponent->BrakingDecelerationWalking = 0.0f;
+
+    LaunchCharacter(
+        DodgeDirection * DodgeStrength,
+        true,
+        false
+    );
+
+    GetWorldTimerManager().SetTimer(
+        DodgeMovementTimer,
+        this,
+        &APMCharacter::EndDodgeMovement,
+        DodgeMovementDuration,
+        false
+    );
+}
+
+void APMCharacter::EndDodgeMovement()
+{
+    if (!bIsDodgeMovementActive)
+    {
+        return;
+    }
+
+    UCharacterMovementComponent* MovementComponent =
+        GetCharacterMovement();
+
+    if (MovementComponent)
+    {
+        MovementComponent->GroundFriction =
+            SavedGroundFriction;
+
+        MovementComponent->BrakingDecelerationWalking =
+            SavedBrakingDecelerationWalking;
+
+        /*
+         * 회피가 끝난 뒤 수평 이동만 멈춥니다.
+         * 혹시 공중에 있다면 Z축 속도는 유지합니다.
+         */
+        FVector CurrentVelocity =
+            MovementComponent->Velocity;
+
+        CurrentVelocity.X = 0.0f;
+        CurrentVelocity.Y = 0.0f;
+
+        MovementComponent->Velocity =
+            CurrentVelocity;
+    }
+
+    bIsDodgeMovementActive = false;
+}
+
 void APMCharacter::ResetDodge()
 {
     bCanDodge = true;
+}
+
+void APMCharacter::EndDodge()
+{
+    EndDodgeMovement();
+    bIsDodging = false;
+}
+
+void APMCharacter::CancelDodge()
+{
+    if (DodgeMontage)
+    {
+        StopAnimMontage(DodgeMontage);
+    }
+
+    EndDodgeMovement();
+
+    bIsDodging = false;
+    EndDodgeInvincibility();
 }
 
 void APMCharacter::StartDodgeInvincibility()
@@ -925,6 +1060,14 @@ void APMCharacter::HandleMontageEnded(
 {
     (void)bInterrupted;
 
+    // 회피 몽타주가 끝나면 회피 동작 상태를 종료합니다.
+    if (Montage == DodgeMontage)
+    {
+        EndDodge();
+        return;
+    }
+
+    // 공격 몽타주가 아니라면 처리하지 않습니다.
     if (Montage != AttackMontage)
     {
         return;
@@ -1070,6 +1213,11 @@ bool APMCharacter::CanPerformAction() const
         return false;
     }
 
+    if (bIsDodging)
+    {
+        return false;
+    }
+
     if (
         HealthComponent
         && HealthComponent->IsDead()
@@ -1159,6 +1307,7 @@ void APMCharacter::StartHitReaction()
     StopSprint();
     StopJumping();
     CancelAttack();
+    CancelDodge();
 
     GetCharacterMovement()->StopMovementImmediately();
 
@@ -1219,6 +1368,7 @@ void APMCharacter::HandleDeath()
 
     bIsHitReacting = false;
     bCanDodge = false;
+    bIsDodging = false;
     bIsParrying = false;
     bCanParry = false;
     bCanParryCounter = false;
@@ -1228,6 +1378,7 @@ void APMCharacter::HandleDeath()
     StopSprint();
     StopJumping();
     CancelAttack();
+    CancelDodge();
 
     if (HitReactMontage)
     {
