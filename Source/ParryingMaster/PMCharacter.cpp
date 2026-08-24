@@ -470,9 +470,6 @@ void APMCharacter::Dodge()
         bIsDodging = false;
     }
 
-    // 회피 이동과 동시에 무적 시간을 시작합니다.
-    StartDodgeInvincibility();
-
     StartDodgeMovement(DodgeDirection);
 
     // 회피 재사용 쿨다운을 시작합니다.
@@ -574,6 +571,8 @@ void APMCharacter::ResetDodge()
 void APMCharacter::EndDodge()
 {
     EndDodgeMovement();
+    EndDodgeInvincibility();
+
     bIsDodging = false;
 }
 
@@ -1026,6 +1025,33 @@ void APMCharacter::HandleMontageNotifyBegin(
 {
     (void)BranchingPointPayload;
 
+    /*
+    * 회피 몽타주 Notify는 공격 상태 확인보다 먼저 처리합니다.
+    * 회피 중에는 bIsAttacking이 false이기 때문입니다.
+    */
+    if (bIsDodging)
+    {
+        if (
+            NotifyName
+            == TEXT("DodgeInvincibilityStart")
+            )
+        {
+            StartDodgeInvincibility();
+
+            return;
+        }
+
+        if (
+            NotifyName
+            == TEXT("DodgeInvincibilityEnd")
+            )
+        {
+            EndDodgeInvincibility();
+
+            return;
+        }
+    }
+    
     if (!bIsAttacking)
     {
         return;
