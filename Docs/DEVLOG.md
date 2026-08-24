@@ -2050,3 +2050,135 @@ DodgeMovementDuration 종료
 - 회피 이동 속도에 별도의 가속 및 감속 곡선이 적용되지 않는다.
 - 모든 방향에서 같은 회피 애니메이션을 사용한다.
 - 이후 방향별 회피 애니메이션, Montage Notify 또는 이동 Curve를 이용해 회피 동작을 세밀하게 조정할 수 있다.
+
+
+---
+
+## 4주차 5일차 — Montage Notify 기반 회피 무적 구간
+
+### 목표
+
+회피 입력 시점부터 고정 시간 동안 적용되던 무적 판정을 회피 몽타주의 실제 동작 프레임과 연결하고, 무적 시작 및 종료 시점을 애니메이션에서 직접 관리한다.
+
+### 구현 내용
+
+- `AM_Player_Dodge`에 `DodgeInvincibilityStart` Montage Notify 추가
+- `AM_Player_Dodge`에 `DodgeInvincibilityEnd` Montage Notify 추가
+- `Dodge()`에서 직접 호출하던 `StartDodgeInvincibility()` 제거
+- 회피 입력 순간이 아니라 Start Notify 시점에 무적 활성화
+- End Notify 시점에 회피 무적 종료
+- `HandleMontageNotifyBegin()`에서 회피 Notify를 공격 Notify보다 먼저 처리
+- 회피 Notify 처리 후 즉시 반환하여 공격 Notify 처리와 분리
+- 회피 Notify 처리 이후 기존 `bIsAttacking` 조건 유지
+- 기존 공격 판정 및 콤보 Notify 처리 유지
+- 기존 0.25초 무적 타이머를 안전장치로 유지
+- 회피 몽타주 종료 시 남은 무적 상태 정리
+- 회피 중단, 피격 및 사망 시 기존 무적 정리 흐름 유지
+
+### 몽타주 구성
+
+```text
+AM_Player_Dodge
+
+회피 준비 동작
+→ DodgeInvincibilityStart
+→ 실제 회피 무적 구간
+→ DodgeInvincibilityEnd
+→ 회피 마무리 동작
+```
+
+### 회피 무적 처리 흐름
+
+```text
+회피 입력
+→ AM_Player_Dodge 재생
+→ 실제 회피 이동 시작
+→ 아직 무적 아님
+
+DodgeInvincibilityStart
+→ HandleMontageNotifyBegin()
+→ bIsDodging 확인
+→ StartDodgeInvincibility()
+→ bIsDodgeInvincible = true
+→ 안전 타이머 시작
+
+DodgeInvincibilityEnd
+→ HandleMontageNotifyBegin()
+→ EndDodgeInvincibility()
+→ 안전 타이머 제거
+→ bIsDodgeInvincible = false
+```
+
+### Notify 처리 순서
+
+```text
+Montage Notify 발생
+
+bIsDodging == true
+→ DodgeInvincibilityStart 또는 DodgeInvincibilityEnd 확인
+→ 회피 Notify 처리 후 return
+
+회피 Notify가 아님
+→ bIsAttacking 확인
+
+bIsAttacking == false
+→ 함수 종료
+
+bIsAttacking == true
+→ AttackHit
+→ ComboWindowOpen
+→ ComboWindowClose 처리
+```
+회피 중에는 bIsAttacking이 false이므로 회피 Notify는 공격 상태 조건보다 먼저 처리해야 한다. 대신 공격 Notify를 처리하기 전에는 기존 bIsAttacking 검사를 유지하여 공격 중이 아닐 때 공격 판정이나 콤보 상태가 변경되지 않도록 한다.
+
+### 안전 처리
+
+```text
+Start Notify 발생
+→ 무적 활성화
+→ DodgeInvincibilityTimer 시작
+
+End Notify 정상 발생
+→ 타이머 제거
+→ 무적 종료
+
+End Notify 누락
+→ 최대 0.25초 후 안전 타이머로 무적 종료
+
+회피 몽타주 종료 또는 중단
+→ EndDodge() 또는 CancelDodge()
+→ EndDodgeInvincibility()
+→ 남은 무적 상태 정리
+```
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Dodge Invincibility Safety Duration | 0.25초 |
+| Start Notify | `DodgeInvincibilityStart` |
+| End Notify | `DodgeInvincibilityEnd` |
+| Start Condition | `bIsDodging == true` |
+| Damage During Invincibility | 0 |
+
+### 테스트 결과
+
+- 회피 몽타주에서 Start Notify가 정상적으로 발생한다.
+- Start Notify 시점에 회피 무적이 활성화된다.
+- End Notify가 정상적으로 발생한다.
+- End Notify 시점에 회피 무적이 종료된다.
+- 무적 구간 안에서 적 공격을 받으면 피해가 무효화된다.
+- 무적 구간이 끝난 뒤에는 다시 피해를 받는다.
+- 회피 입력 직후부터 전체 동작이 무적 상태가 되지 않는다.
+- 회피 종료 후 무적 상태가 남지 않는다.
+- 기존 공격 판정 Notify가 정상적으로 작동한다.
+- 기존 Combo Window Notify와 3단 콤보가 정상적으로 유지된다.
+- 회피 이동, 쿨다운 및 벽 충돌이 정상적으로 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 무적 시작 및 종료 Notify 위치는 몽타주에서 수동으로 조정한다.
+- 안전 타이머가 0.25초이므로 Notify 무적 구간을 그보다 길게 배치하면 타이머가 먼저 무적을 종료할 수 있다.
+- 회피 무적 구간을 시각적으로 확인할 수 있는 디버그 표시가 없다.
+- 모든 종류의 TakeDamage() 피해가 회피 무적으로 차단된다.
+- 이후 방향별 회피 애니메이션을 사용할 경우 각 몽타주의 무적 Notify 위치를 함께 조정해야 한다.

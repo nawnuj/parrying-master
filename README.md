@@ -46,6 +46,7 @@
 - [x] 회피 무적 상태와 지속 시간
 - [x] 회피 무적 중 피해 및 피격 반응 차단
 - [x] 사망 시 회피 무적 상태와 타이머 정리
+- [x] Montage Notify 기반 회피 무적 시작 및 종료
 - [ ] 사망 애니메이션
 - [x] 플레이어와 적 공격 상태 기반 패링 성공 판정
 - [x] 패링 성공 시 피해 및 피격 반응 무효화
@@ -165,7 +166,7 @@ Docs/
 | `BP_ParryingGameMode` | 기본 플레이어 캐릭터 설정 |
 | `AM_Player_Attack_01` | `Attack1`, `Attack2`, `Attack3` Section과 타격 및 콤보 입력 시점 Notify 관리 |
 | `AM_Player_HitReact` | 플레이어가 피해를 받았을 때 재생되는 피격 애니메이션 관리 |
-| `AM_Player_Dodge` | 플레이어의 회피 애니메이션 재생과 회피 상태 종료를 관리하는 Montage |
+| `AM_Player_Dodge` | 플레이어의 회피 애니메이션 재생, 회피 상태 종료 및 무적 시작·종료 Notify를 관리하는 Montage |
 | `AM_Enemy_Attack_01` | 적 공격 애니메이션과 타격 및 패링 가능 구간 Notify 관리 |
 | `WBP_HUD` | 플레이어의 현재 체력을 Progress Bar로 표시 |
 | `BP_DamageZone` | 플레이어의 체력 및 사망 기능 테스트 |
@@ -218,6 +219,12 @@ Docs/
 실제 캐릭터 이동은 `StartDodgeMovement()`에서 처리한다. 회피 이동 중에는 지상 마찰과 보행 감속을 일시적으로 제거하여 `LaunchCharacter()`의 속도가 시작 직후 사라지지 않도록 했으며, `DodgeMovementDuration`이 끝나면 `EndDodgeMovement()`에서 수평 속도를 제거하고 기존 이동 설정을 복구한다.
 
 현재 `BP_PMCharacter` 기준 회피 강도는 700, 이동 지속 시간은 0.25초, 몽타주 재생 속도는 1.0으로 설정했다. 회피 몽타주 종료, 피격 및 사망 시 회피 이동과 상태를 정리하며, 벽에서는 기존 캐릭터 충돌을 통해 정상적으로 이동이 차단된다.
+
+회피 입력과 동시에 시작되던 무적 시간을 `AM_Player_Dodge`의 동작 프레임에 맞추도록 개선했다. `DodgeInvincibilityStart` Notify에서 무적을 활성화하고 `DodgeInvincibilityEnd` Notify에서 무적을 종료한다.
+
+`HandleMontageNotifyBegin()`에서는 회피 Notify를 공격 상태 검사보다 먼저 처리하고, 이후 기존 `bIsAttacking` 조건을 통과한 경우에만 공격 Notify를 처리한다. 따라서 회피 Notify와 기존 공격 및 콤보 Notify가 하나의 처리 함수를 안전하게 공유한다.
+
+기존 0.25초 무적 타이머는 End Notify가 누락되더라도 무적이 계속 남지 않도록 하는 안전장치로 유지했다. 회피 몽타주가 종료되거나 중단된 경우에도 `EndDodge()`와 `CancelDodge()`에서 무적 상태를 정리한다.
 
 ## 개발 기록
 
