@@ -2182,3 +2182,144 @@ End Notify 누락
 - 회피 무적 구간을 시각적으로 확인할 수 있는 디버그 표시가 없다.
 - 모든 종류의 TakeDamage() 피해가 회피 무적으로 차단된다.
 - 이후 방향별 회피 애니메이션을 사용할 경우 각 몽타주의 무적 Notify 위치를 함께 조정해야 한다.
+
+---
+
+## 4주차 6일차 — 플레이어 사망 몽타주와 자세 유지
+
+### 목표
+
+플레이어의 체력이 0이 되었을 때 기존 행동을 모두 종료하고 사망 애니메이션을 재생하며, 애니메이션이 끝난 뒤에도 마지막 사망 자세를 유지하도록 구현한다.
+
+### 구현 내용
+
+- 플레이어 사망 Animation Montage `AM_Player_Death` 추가
+- `MM_Death_Front_03`을 사망 몽타주의 재생 소스로 사용
+- `DeathMontage` 설정값 추가
+- `BP_PMCharacter`의 Death Montage에 `AM_Player_Death` 지정
+- 기존 `HandleDeath()`에 사망 몽타주 재생 처리 추가
+- 공격, 회피 및 피격 몽타주 정리 이후 사망 몽타주 재생
+- 사망 전에 진행 중이던 공격과 콤보 상태 정리
+- 사망 전에 진행 중이던 회피 이동과 무적 상태 정리
+- 패링 및 패링 반격 관련 상태와 타이머 정리
+- 현재 캐릭터 이동을 즉시 정지
+- Character Movement 비활성화
+- 플레이어 입력 비활성화
+- 사망 몽타주의 자동 Blend Out 비활성화
+- 사망 애니메이션의 마지막 자세 유지
+- 기존 플레이어 사망 이벤트와 적 AI 전투 중단 흐름 유지
+
+### 애니메이션 구성
+
+```text
+MM_Death_Front_03
+→ AM_Player_Death의 Montage Track에 배치
+
+AM_Player_Death
+→ DefaultSlot 사용
+→ 반복 재생 비활성화
+→ Enable Auto Blend Out 비활성화
+
+BP_PMCharacter
+→ Death Montage에 AM_Player_Death 지정
+```
+
+### 사망 처리 흐름
+
+```text
+플레이어 체력 0
+→ UPMHealthComponent::OnDeath 발생
+→ APMCharacter::HandleDeath()
+
+관련 타이머 제거
+→ 피격 상태 초기화
+→ 회피 상태 초기화
+→ 패링 상태 초기화
+→ 패링 반격 상태 초기화
+
+StopSprint()
+→ StopJumping()
+→ CancelAttack()
+→ CancelDodge()
+→ HitReactMontage 중단
+
+StopMovementImmediately()
+→ DisableMovement()
+
+DeathMontage 확인
+→ AM_Player_Death 재생
+
+DisableInput()
+→ 사망 후 플레이어 조작 차단
+```
+
+### 사망 몽타주 재생 순서
+
+사망 몽타주는 기존 몽타주를 모두 중단한 뒤 재생해야 한다.
+
+```text
+CancelAttack()
+→ AttackMontage 중단
+
+CancelDodge()
+→ DodgeMontage 중단
+
+StopAnimMontage(HitReactMontage)
+→ 피격 몽타주 중단
+
+PlayAnimMontage(DeathMontage)
+→ 사망 몽타주 재생
+```
+사망 몽타주를 기존 몽타주 중단 코드보다 먼저 재생하면 같은 DefaultSlot을 사용하는 StopAnimMontage()에 의해 사망 몽타주가 즉시 중단될 수 있다.
+
+### 마지막 자세 유지
+
+처음에는 사망 애니메이션이 끝나면 몽타주가 자동으로 Blend Out되면서 Animation Blueprint의 Idle 자세로 돌아왔다.
+
+```text
+사망 몽타주 재생
+→ 애니메이션 종료
+→ 자동 Blend Out
+→ DefaultSlot 종료
+→ 이동 State Machine의 Idle 자세 복귀
+```
+AM_Player_Death에서 Enable Auto Blend Out을 비활성화하여 이를 해결했다.
+
+```text
+사망 몽타주 재생
+→ 마지막 프레임 도달
+→ 자동 Blend Out 하지 않음
+→ 사망 몽타주 활성 상태 유지
+→ 마지막 사망 자세 유지
+```
+
+### 설정값
+
+| 항목 | 값 |
+|---|---|
+| Death Montage | `AM_Player_Death` |
+| Source Animation | `MM_Death_Front_03` |
+| Montage Slot | `DefaultSlot` |
+| Loop | 비활성화 |
+| Enable Auto Blend Out | 비활성화 |
+| Movement After Death | 비활성화 |
+| Input After Death | 비활성화 |
+
+### 테스트 결과
+
+- 일반 피해에서는 기존 피격 몽타주가 재생된다.
+- 체력이 0이 되면 사망 몽타주가 재생된다.
+- 사망 시 기존 이동이 즉시 정지한다.
+- 사망 후 이동과 입력이 차단된다.
+- 사망 애니메이션이 끝난 뒤 Idle 자세로 돌아가지 않는다.
+- 사망 애니메이션의 마지막 프레임이 유지된다.
+- 기존 체력 컴포넌트와 사망 이벤트가 정상적으로 유지된다.
+- 플레이어 사망 후 적 AI가 추적과 공격을 중단하는 기존 기능이 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 현재는 공격 방향과 관계없이 하나의 사망 애니메이션만 사용한다.
+- 사망 몽타주는 DefaultSlot에서 마지막 프레임을 계속 유지한다.
+- 사망 이후 별도의 UI나 재시작 안내가 표시되지 않는다.
+- 사망한 플레이어의 캡슐 충돌은 기존 상태를 유지한다.
+- 다음 단계에서 사망 후 일정 시간이 지나면 현재 레벨을 재시작하도록 구현할 예정이다.

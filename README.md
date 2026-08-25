@@ -47,7 +47,7 @@
 - [x] 회피 무적 중 피해 및 피격 반응 차단
 - [x] 사망 시 회피 무적 상태와 타이머 정리
 - [x] Montage Notify 기반 회피 무적 시작 및 종료
-- [ ] 사망 애니메이션
+- [x] 플레이어 사망 몽타주와 마지막 자세 유지
 - [x] 플레이어와 적 공격 상태 기반 패링 성공 판정
 - [x] 패링 성공 시 피해 및 피격 반응 무효화
 - [x] 패링 성공 시 활성 패링 판정 즉시 소비
@@ -118,7 +118,8 @@ Content/
 │  └─ Player/
 │     ├─ AM_Player_Attack_01
 │     ├─ AM_Player_HitReact
-│     └─ AM_Player_Dodge
+│     ├─ AM_Player_Dodge
+│     └─ AM_Player_Death
 ├─ Blueprints/
 │  ├─ Characters/
 │  │  └─ BP_PMCharacter
@@ -159,7 +160,7 @@ Docs/
 | `UPMHealthComponent` | 플레이어와 적의 최대 체력, 현재 체력, 피해 및 사망 상태 관리 |
 | `APMEnemyCharacter` | 적 캐릭터의 체력, 공격 몽타주, 근접 공격 판정, 패링 가능 구간, 플레이어 패링 방향 확인, 패링 성공 및 피해 무효화 판정, 패링 경직, 전투 상태 정리 및 사망 처리 |
 | `APMEnemyAIController` | 플레이어 생존 상태와 적 경직 상태 확인, NavMesh 추적, 공격 요청 및 전투 중단 시 AI 정지 처리 |
-| `BP_PMCharacter` | 플레이어 메시, 애니메이션, 입력 에셋, HUD, 회피 몽타주 및 회피 이동 설정값 연결 |
+| `BP_PMCharacter` | 플레이어 메시, 애니메이션, 입력 에셋, HUD, 회피 설정값과 회피 및 사망 몽타주 연결 |
 | `BP_EnemyCharacter` | 적 메시, 애니메이션, 체력, 충돌, 카메라 충돌 응답, AI 및 공격 설정 |
 | `ABP_Unarmed` | 플레이어 이동 애니메이션과 전신 공격 몽타주 및 Control Rig 적용 순서 관리 |
 | `ABP_Enemy` | 적의 실제 이동 속도를 이용한 Idle 및 Walk 애니메이션 전환 |
@@ -167,6 +168,7 @@ Docs/
 | `AM_Player_Attack_01` | `Attack1`, `Attack2`, `Attack3` Section과 타격 및 콤보 입력 시점 Notify 관리 |
 | `AM_Player_HitReact` | 플레이어가 피해를 받았을 때 재생되는 피격 애니메이션 관리 |
 | `AM_Player_Dodge` | 플레이어의 회피 애니메이션 재생, 회피 상태 종료 및 무적 시작·종료 Notify를 관리하는 Montage |
+| `AM_Player_Death` | 플레이어 사망 애니메이션을 재생하고 자동 Blend Out을 막아 마지막 사망 자세를 유지하는 Montage |
 | `AM_Enemy_Attack_01` | 적 공격 애니메이션과 타격 및 패링 가능 구간 Notify 관리 |
 | `WBP_HUD` | 플레이어의 현재 체력을 Progress Bar로 표시 |
 | `BP_DamageZone` | 플레이어의 체력 및 사망 기능 테스트 |
@@ -226,6 +228,12 @@ Docs/
 
 기존 0.25초 무적 타이머는 End Notify가 누락되더라도 무적이 계속 남지 않도록 하는 안전장치로 유지했다. 회피 몽타주가 종료되거나 중단된 경우에도 `EndDodge()`와 `CancelDodge()`에서 무적 상태를 정리한다.
 
+플레이어 체력이 0이 되었을 때 재생되는 `AM_Player_Death`를 추가했다. 기존 `MM_Death_Front_03` 애니메이션을 재생 소스로 사용하고, `BP_PMCharacter`의 `DeathMontage`에 연결했다.
+
+`HandleDeath()`에서 공격, 회피, 패링, 피격 상태와 관련 타이머를 먼저 정리하고 기존 몽타주와 이동을 중단한 뒤 사망 몽타주를 재생한다. 이후 플레이어 이동과 입력을 비활성화하므로 사망 중 다른 행동을 실행할 수 없다.
+
+사망 몽타주의 `Enable Auto Blend Out`을 비활성화하여 애니메이션 재생이 끝난 뒤 Idle 자세로 돌아가지 않고 마지막 사망 자세를 유지하도록 구성했다.
+
 ## 개발 기록
 
 프로젝트의 날짜별 구현 내용과 문제 해결 과정을 기록합니다.
@@ -252,7 +260,7 @@ Docs/
 - [ ] 방향별 회피 애니메이션 확장
 - [ ] Montage Notify 또는 이동 Curve 기반 회피 타이밍 보완
 - [x] 회피 무적 시간
-- [ ] 플레이어 사망 애니메이션
+- [x] 플레이어 사망 애니메이션과 마지막 자세 유지
 - [ ] 플레이어 사망 후 레벨 재시작
 - [ ] 공격 애니메이션 및 Root Motion 개선
 - [ ] 적 공격 패턴 확장
