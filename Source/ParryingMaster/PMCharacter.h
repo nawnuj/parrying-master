@@ -343,6 +343,14 @@ protected:
     )
     TObjectPtr<UPMHealthComponent> HealthComponent;
 
+    // 플레이어가 사망했을 때 재생할 몽타주입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Death"
+    )
+    TObjectPtr<UAnimMontage> DeathMontage;
+
 
 private:
     // WASD 입력을 처리합니다.

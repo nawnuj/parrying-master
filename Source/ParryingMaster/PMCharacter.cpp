@@ -1414,6 +1414,16 @@ void APMCharacter::HandleDeath()
     GetCharacterMovement()->StopMovementImmediately();
     GetCharacterMovement()->DisableMovement();
 
+
+    /*
+     * 기존 행동과 이동을 모두 정리한 뒤
+     * 사망 몽타주를 재생합니다.
+     */
+    if (DeathMontage)
+    {
+        PlayAnimMontage(DeathMontage);
+    }
+
     APlayerController* PlayerController =
         Cast<APlayerController>(Controller);
 
