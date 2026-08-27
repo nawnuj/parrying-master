@@ -533,3 +533,109 @@ Loop: 비활성화
 - 사망 애니메이션은 반복 재생하지 않고 마지막 프레임에서 유지하는 방식으로 처리할 수 있다.
 - 몽타주 재생 순서는 기존 공격, 회피 및 피격 몽타주를 모두 중단한 이후여야 한다.
 
+---
+
+## 적이 일정 거리에서 멈춘 채 공격하지 않는 문제
+
+### 발생 시점
+
+4주차 7일차 사망 후 레벨 재시작 기능을 통합 테스트하는 과정에서 발견했다.
+
+### 증상
+
+- 적이 플레이어를 추적하다가 일정 거리에서 이동을 멈췄다.
+- 이동을 멈춘 뒤에도 공격 몽타주가 재생되지 않았다.
+- 처음에는 플레이어가 적에게 등을 돌렸을 때 발생하는 것처럼 보였다.
+- Acceptance Radius를 낮추면 문제가 발생하는 위치만 달라지고 현상은 계속됐다.
+- 공격 Trace 이전에 문제가 발생했으므로 공격 애니메이션 자체가 시작되지 않았다.
+
+### 조사 결과
+
+AI Controller의 공격 시작 조건은 플레이어의 방향을 사용하지 않았다.
+
+```text
+FVector::Dist2D(
+    EnemyLocation,
+    PlayerLocation
+)
+```
+
+TryAttack()에서도 공격을 시작하기 전에 적이 플레이어 방향으로 직접 회전하고 있었다. 따라서 플레이어가 앞이나 뒤를 바라보는 것은 공격 시작 여부와 관계가 없었다.
+실제 문제는 AI Controller와 Enemy Character가 서로 다른 거리 설정값을 공격 판단에 사용하던 구조였다.
+
+```text
+APMEnemyAIController
+→ AcceptanceRadius 기준으로 이동 정지 및 공격 요청
+
+APMEnemyCharacter
+→ EnemyAttackRange 기준으로 실제 공격 허용
+```
+
+### 원인
+
+AcceptanceRadius는 원래 NavMesh 이동 요청의 도착 허용 오차이지만 공격 시작 거리로도 사용되고 있었다.
+AI가 이동을 멈춘 뒤 TryAttack()이 다시 EnemyAttackRange를 검사하기 때문에 두 값 또는 실제 BP 설정이 어긋나면 이동은 멈췄지만 공격은 시작하지 않는 데드존이 발생할 수 있었다.
+
+```text
+AI 이동 정지
+→ TryAttack() 요청
+→ 실제 공격 거리 검사 실패
+→ 공격 몽타주 재생 실패
+→ 적이 같은 위치에 정지
+```
+
+### 해결 방법
+
+APMEnemyCharacter에 실제 공격 거리를 반환하는 함수를 추가했다.
+
+```text
+float APMEnemyCharacter::GetAttackRange() const
+{
+    return EnemyAttackRange;
+}
+```
+
+AI Controller의 공격 시작 조건도 동일한 공격 거리를 사용하도록 변경했다.
+
+```text
+const float AttackRange =
+    EnemyCharacter->GetAttackRange();
+
+if (DistanceToTarget <= AttackRange)
+{
+    StopMovement();
+
+    EnemyCharacter->TryAttack(
+        TargetPawn.Get()
+    );
+
+    return;
+}
+```
+
+AcceptanceRadius는 MoveToActor()의 이동 허용 오차로만 유지했다.
+
+```text
+EnemyAttackRange
+→ AI 공격 요청과 실제 공격 허용 기준
+
+AcceptanceRadius
+→ NavMesh 이동 요청의 도착 허용 오차
+```
+
+### 테스트 결과
+
+- 플레이어가 적을 바라볼 때 정상적으로 공격한다.
+- 플레이어가 적에게 등을 돌려도 동일하게 공격한다.
+- 적이 공격 범위 안에 들어오면 이동을 멈추고 공격 몽타주를 재생한다.
+- 공격 거리 경계에서 적이 멈춘 채 대기하는 현상이 해결됐다.
+- 기존 공격 Trace와 피해 적용이 정상적으로 유지된다.
+- 기존 패링 가능 구간과 패링 경직이 정상적으로 유지된다.
+
+### 배운 점
+
+- 동시에 사용되는 거리 설정값은 이름이 비슷하더라도 책임을 명확하게 구분해야 한다.
+- NavMesh의 Acceptance Radius는 전투 공격 범위와 같은 개념이 아니다.
+- 같은 공격 가능 여부를 여러 클래스가 판단한다면 하나의 설정값을 공통으로 사용해야 한다.
+- 플레이어의 방향과 함께 발생한 현상이라도 실제 조건문에서 방향을 사용하는지 먼저 확인해야 한다.
+- 애니메이션이 시작되지 않는 문제는 공격 Trace보다 앞선 AI 요청 및 상태 조건부터 확인해야 한다.

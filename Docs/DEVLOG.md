@@ -2323,3 +2323,192 @@ AM_Player_Death에서 Enable Auto Blend Out을 비활성화하여 이를 해결�
 - 사망 이후 별도의 UI나 재시작 안내가 표시되지 않는다.
 - 사망한 플레이어의 캡슐 충돌은 기존 상태를 유지한다.
 - 다음 단계에서 사망 후 일정 시간이 지나면 현재 레벨을 재시작하도록 구현할 예정이다.
+
+---
+
+## 4주차 7일차 — 사망 후 레벨 재시작과 적 공격 거리 통일
+
+### 목표
+
+플레이어가 사망한 뒤 일정 시간 동안 사망 자세를 보여주고 현재 레벨을 다시 시작한다. 통합 테스트에서 발견된 적 공격 거리 데드존을 수정하여 AI Controller와 Enemy Character가 같은 공격 거리 기준을 사용하도록 한다.
+
+### 구현 내용
+
+#### 사망 후 레벨 재시작
+
+- 사망 후 재시작 대기 시간을 관리하는 `DeathRestartDelay` 추가
+- 기본 재시작 대기 시간을 3초로 설정
+- 레벨 재시작 시점을 관리하는 `DeathRestartTimer` 추가
+- 현재 레벨을 다시 여는 `RestartCurrentLevel()` 구현
+- 사망 시 기존 재시작 타이머 제거
+- 사망 처리와 입력 비활성화 이후 재시작 타이머 시작
+- 재시작 대기 시간이 0 이하라면 즉시 현재 레벨 재실행
+- `GetCurrentLevelName()`을 이용한 현재 레벨 이름 확인
+- 현재 레벨 이름이 비어 있으면 재시작하지 않도록 방어 처리
+- `OpenLevel()`을 이용한 현재 레벨 재실행
+- 레벨 재실행을 통한 플레이어와 적 런타임 상태 초기화
+- 사망 시 `DodgeMovementTimer`도 함께 제거하도록 상태 정리 보완
+
+#### 적 공격 거리 데드존 수정
+
+- 적이 일정 거리에서 이동을 멈추고 공격하지 않는 현상 조사
+- 플레이어 방향은 공격 시작 조건에 사용되지 않음을 확인
+- 공격 시작 거리와 NavMesh 도착 허용 거리의 책임 분리
+- 적의 공격 거리를 반환하는 `GetAttackRange()` 추가
+- AI Controller가 Enemy Character의 공격 거리를 사용하도록 변경
+- `AcceptanceRadius`를 공격 시작 판단에서 제거
+- `AcceptanceRadius`를 NavMesh 이동 허용 오차로만 사용
+- Acceptance Radius를 150에서 120으로 조정
+- 플레이어 방향과 관계없이 동일한 거리에서 공격하도록 수정
+- 적이 멈춘 채 공격하지 않는 거리 데드존 제거
+
+### 사망 후 재시작 흐름
+
+```text
+플레이어 체력 0
+→ UPMHealthComponent::OnDeath
+→ APMCharacter::HandleDeath()
+
+기존 행동 타이머 제거
+→ 기존 행동 상태 초기화
+→ 공격, 회피 및 피격 몽타주 정리
+→ 이동 즉시 정지
+→ Character Movement 비활성화
+→ AM_Player_Death 재생
+→ 플레이어 입력 비활성화
+
+DeathRestartDelay 확인
+
+DeathRestartDelay <= 0
+→ RestartCurrentLevel() 즉시 호출
+
+DeathRestartDelay > 0
+→ DeathRestartTimer 시작
+→ 기본 3초 대기
+→ RestartCurrentLevel() 호출
+```
+
+### 현재 레벨 재실행
+
+```text
+RestartCurrentLevel()
+→ GetCurrentLevelName(this, true)
+→ PIE Prefix를 제거한 현재 레벨 이름 확인
+
+레벨 이름이 비어 있음
+→ 오류 로그 출력
+→ 함수 종료
+
+정상적인 레벨 이름
+→ OpenLevel()
+→ 현재 레벨 다시 로드
+```
+
+현재 레벨을 다시 열면 기존 World가 제거되고 새로운 World가 생성된다.
+
+```text
+플레이어 체력 초기화
+→ 플레이어 입력 및 이동 복구
+→ 적 체력과 위치 초기화
+→ 적 AI Controller 새로 생성
+→ 전투 상태와 타이머 초기화
+```
+
+### 적 공격 거리 문제
+
+수정 전에는 AI Controller와 Enemy Character가 서로 다른 값을 공격 조건에 사용했다.
+
+```text
+APMEnemyAIController
+→ DistanceToTarget <= AcceptanceRadius
+→ 이동 중지
+→ TryAttack() 호출
+
+APMEnemyCharacter
+→ DistanceToTarget <= EnemyAttackRange
+→ 공격 몽타주 재생
+```
+
+두 기준이 일치하지 않으면 다음과 같은 상태가 발생할 수 있었다.
+AI 이동 정지
+→ TryAttack() 호출
+→ EnemyAttackRange 검사 실패
+→ 공격 몽타주 재생 안 됨
+→ 다음 Tick에서도 같은 위치에서 반복
+→ 적이 멈춘 채 공격하지 않음
+```
+
+수정 후에는 Enemy Character가 공격 거리의 소유자가 된다.
+
+```text
+APMEnemyCharacter
+→ EnemyAttackRange 보유
+→ GetAttackRange() 제공
+
+APMEnemyAIController
+→ GetAttackRange() 호출
+→ DistanceToTarget <= AttackRange
+→ 이동 중지
+→ TryAttack() 호출
+
+TryAttack()
+→ 동일한 EnemyAttackRange로 재검사
+→ 공격 몽타주 재생
+```
+
+### 설정값
+
+| 항목 | 값 |
+|---|---:|
+| Death Restart Delay | 3.0초 |
+| Level Restart Method | `UGameplayStatics::OpenLevel()` |
+| Enemy Attack Range | 180 |
+| AI Acceptance Radius | 120 |
+| AI Tick Interval | 0.25초 |
+
+### 책임 분리
+
+```text
+DeathRestartDelay
+→ 사망 이후 레벨을 다시 열기까지 기다리는 시간
+
+DeathRestartTimer
+→ 레벨 재시작 시점 관리
+
+RestartCurrentLevel()
+→ 현재 레벨 이름 확인 및 재실행
+
+EnemyAttackRange
+→ 실제 공격 시작 및 공격 Trace 거리 기준
+
+GetAttackRange()
+→ AI Controller에 공격 거리 제공
+
+AcceptanceRadius
+→ NavMesh 이동 요청의 도착 허용 오차
+```
+
+### 테스트 결과
+
+- 플레이어 체력이 0이 되면 사망 몽타주가 재생된다.
+- 사망 후 이동과 입력이 비활성화된다.
+- 약 3초 동안 마지막 사망 자세가 유지된다.
+- 3초가 지나면 현재 테스트 레벨이 다시 열린다.
+- 레벨 재시작 후 플레이어 체력이 최대치로 복구된다.
+- 레벨 재시작 후 플레이어 이동과 입력이 정상적으로 작동한다.
+- 적의 위치, 체력과 AI 상태가 초기화된다.
+- 반복해서 사망해도 재시작 타이머가 중복되지 않는다.
+- 플레이어가 적을 바라보거나 등을 돌려도 적의 공격 조건이 동일하다.
+- 적이 공격 거리 안에서 이동을 멈춘 뒤 공격 몽타주를 재생한다.
+- 공격 범위 경계에서 적이 멈춘 채 공격하지 않는 현상이 해결됐다.
+- 기존 적 추적, 공격 피해, 패링 가능 구간과 경직 기능이 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 현재 레벨 재시작은 별도의 UI 없이 자동으로 실행된다.
+- 재시작 전에 화면 전환이나 Fade 효과가 없다.
+- 사망까지 남은 시간이나 재시작 안내가 화면에 표시되지 않는다.
+- OpenLevel()을 사용하므로 플레이어뿐 아니라 현재 레벨의 모든 런타임 상태가 초기화된다.
+- 현재 구조는 싱글 플레이 테스트를 기준으로 한다.
+- 적 공격 거리와 공격 Trace가 하나의 EnemyAttackRange 값을 공유한다.
+- 이후 전투 밸런스 조정 과정에서 추적 정지 거리와 공격 거리 사이의 여유값을 별도로 설계할 수 있다.
