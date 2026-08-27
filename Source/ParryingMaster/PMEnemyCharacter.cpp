@@ -85,6 +85,11 @@ void APMEnemyCharacter::HandleDeath()
     SetLifeSpan(2.0f);
 }
 
+float APMEnemyCharacter::GetAttackRange() const
+{
+    return EnemyAttackRange;
+}
+
 bool APMEnemyCharacter::IsAttackParryable() const
 {
     return bIsAttackParryable;

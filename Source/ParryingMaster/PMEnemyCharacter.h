@@ -17,6 +17,9 @@ public:
     APMEnemyCharacter();
     // AI Controller가 공격 거리 안에서 호출합니다.
     void TryAttack(AActor* TargetActor);
+
+    // 적이 공격을 시작할 수 있는 거리를 반환합니다.
+    float GetAttackRange() const;
    
     // 진행 중인 공격과 전투 상태를 정리합니다.
     void StopCombat();

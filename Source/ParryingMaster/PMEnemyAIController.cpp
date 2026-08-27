@@ -80,7 +80,10 @@ void APMEnemyAIController::Tick(float DeltaSeconds)
         TargetPawn->GetActorLocation()
     );
 
-    if (DistanceToTarget <= AcceptanceRadius)
+    const float AttackRange =
+        EnemyCharacter->GetAttackRange();
+
+    if (DistanceToTarget <= AttackRange)
     {
         StopMovement();
 

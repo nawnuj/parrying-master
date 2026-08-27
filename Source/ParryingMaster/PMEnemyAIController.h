@@ -24,7 +24,7 @@ protected:
         Category = "AI",
         meta = (ClampMin = "0.0")
     )
-    float AcceptanceRadius = 150.0f;
+    float AcceptanceRadius = 120.0f;
 
 private:
     // 현재 추적 중인 플레이어입니다.
