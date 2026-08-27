@@ -1368,12 +1368,23 @@ void APMCharacter::EndHitReaction()
 
 void APMCharacter::HandleDeath()
 {
+    /*
+     * 사망 이전에 실행 중이던 모든 타이머를 정리합니다.
+     */
     GetWorldTimerManager().ClearTimer(
         HitReactTimer
     );
 
     GetWorldTimerManager().ClearTimer(
         DodgeCooldownTimer
+    );
+
+    GetWorldTimerManager().ClearTimer(
+        DodgeMovementTimer
+    );
+
+    GetWorldTimerManager().ClearTimer(
+        DodgeInvincibilityTimer
     );
 
     GetWorldTimerManager().ClearTimer(
@@ -1389,9 +1400,12 @@ void APMCharacter::HandleDeath()
     );
 
     GetWorldTimerManager().ClearTimer(
-        DodgeInvincibilityTimer
+        DeathRestartTimer
     );
 
+    /*
+     * 사망 후 기존 행동 상태가 남지 않도록 초기화합니다.
+     */
     bIsHitReacting = false;
     bCanDodge = false;
     bIsDodging = false;
@@ -1401,6 +1415,9 @@ void APMCharacter::HandleDeath()
     bIsParryCounterAttacking = false;
     bIsDodgeInvincible = false;
 
+    /*
+     * 현재 실행 중인 행동과 몽타주를 정리합니다.
+     */
     StopSprint();
     StopJumping();
     CancelAttack();
@@ -1411,12 +1428,14 @@ void APMCharacter::HandleDeath()
         StopAnimMontage(HitReactMontage);
     }
 
+    /*
+     * 사망한 플레이어의 이동을 즉시 중단합니다.
+     */
     GetCharacterMovement()->StopMovementImmediately();
     GetCharacterMovement()->DisableMovement();
 
-
     /*
-     * 기존 행동과 이동을 모두 정리한 뒤
+     * 다른 몽타주를 모두 정리한 뒤
      * 사망 몽타주를 재생합니다.
      */
     if (DeathMontage)
@@ -1424,6 +1443,9 @@ void APMCharacter::HandleDeath()
         PlayAnimMontage(DeathMontage);
     }
 
+    /*
+     * 사망 후 플레이어 입력을 비활성화합니다.
+     */
     APlayerController* PlayerController =
         Cast<APlayerController>(Controller);
 
@@ -1435,7 +1457,60 @@ void APMCharacter::HandleDeath()
     UE_LOG(
         LogTemp,
         Warning,
-        TEXT("Player input and movement disabled.")
+        TEXT("Player died. Restarting level in %.1f seconds."),
+        DeathRestartDelay
+    );
+
+    /*
+     * 대기 시간이 0 이하라면 즉시 현재 레벨을 다시 엽니다.
+     */
+    if (DeathRestartDelay <= 0.0f)
+    {
+        RestartCurrentLevel();
+        return;
+    }
+
+    /*
+     * 지정된 시간이 지나면 현재 레벨을 다시 시작합니다.
+     */
+    GetWorldTimerManager().SetTimer(
+        DeathRestartTimer,
+        this,
+        &APMCharacter::RestartCurrentLevel,
+        DeathRestartDelay,
+        false
+    );
+}
+
+void APMCharacter::RestartCurrentLevel()
+{
+    const FString CurrentLevelName =
+        UGameplayStatics::GetCurrentLevelName(
+            this,
+            true
+        );
+
+    if (CurrentLevelName.IsEmpty())
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("Failed to restart level: Level name is empty.")
+        );
+
+        return;
+    }
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Restarting Level: %s"),
+        *CurrentLevelName
+    );
+
+    UGameplayStatics::OpenLevel(
+        this,
+        FName(*CurrentLevelName)
     );
 }
 

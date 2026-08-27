@@ -351,6 +351,15 @@ protected:
     )
     TObjectPtr<UAnimMontage> DeathMontage;
 
+    // 사망 후 현재 레벨을 다시 시작하기까지 기다리는 시간입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Death",
+        meta = (ClampMin = "0.0")
+    )
+    float DeathRestartDelay = 3.0f;
+
 
 private:
     // WASD 입력을 처리합니다.
@@ -456,6 +465,9 @@ private:
         float MaxHealth
     );
 
+    // 현재 플레이 중인 레벨을 다시 시작합니다.
+    void RestartCurrentLevel();
+
     // 피격 상태를 시작합니다.
     void StartHitReaction();
 
@@ -509,6 +521,9 @@ private:
 
     // 패링 반격 가능 시간의 종료 시점을 관리합니다.
     FTimerHandle ParryCounterWindowTimer;
+
+    // 사망 후 레벨 재시작 시점을 관리합니다.
+    FTimerHandle DeathRestartTimer;
 
     // 현재 실행 중인 콤보 단계입니다.
     // 0은 콤보가 진행 중이지 않은 상태입니다.
