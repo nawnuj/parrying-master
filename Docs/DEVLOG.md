@@ -2512,3 +2512,142 @@ AcceptanceRadius
 - 현재 구조는 싱글 플레이 테스트를 기준으로 한다.
 - 적 공격 거리와 공격 Trace가 하나의 EnemyAttackRange 값을 공유한다.
 - 이후 전투 밸런스 조정 과정에서 추적 정지 거리와 공격 거리 사이의 여유값을 별도로 설계할 수 있다.
+
+---
+
+## 5주차 1일차 — 플레이어 패링 애니메이션과 이동 제한
+
+### 목표
+
+기존 상태값과 로그로만 확인할 수 있던 플레이어 패링 입력에 전용 애니메이션을 연결한다. 전신 패링 몽타주가 이동 중 재생되면서 캐릭터가 미끄러져 보이지 않도록 패링 시작 조건과 몽타주 재생 중 이동을 제한한다.
+
+### 외부 애니메이션 적용
+
+- Unreal Engine 5.6용 `RamsterZ Free Anims Volume 1` 에셋을 UE 5.8 프로젝트에서 확인
+- UE 5.8에서 Animation Sequence가 오류 없이 열리는지 확인
+- UE4 Mannequin용 `Paired_CounterPunch_PalmStrike_Att` 선택
+- UE4 Mannequin을 Source Preview Mesh로 사용
+- `SKM_Manny_Simple`을 Target Preview Mesh로 설정
+- 자동 리타기팅을 이용해 UE5 Manny용 Animation Sequence 생성
+- 리타기팅 결과물을 `A_Player_Parry`로 정리
+- `A_Player_Parry`의 Root Motion 비활성화
+- `Force Root Lock` 활성화
+- 패링 전용 `AM_Player_Parry` 생성
+- 패링 몽타주의 자동 Blend Out 활성화
+- 빠른 입력 반응을 위한 짧은 Blend In과 Blend Out 적용
+- `BP_PMCharacter`의 `ParryMontage`에 `AM_Player_Parry` 지정
+
+### 패링 몽타주 연결
+
+`PMCharacter.h`에 패링 입력 애니메이션을 지정할 수 있는 `ParryMontage`를 추가했다.
+
+```text
+ParryMontage
+→ 패링 입력 시 재생할 Animation Montage
+```
+
+StartParry()의 기존 행동 조건을 통과하고 패링 상태를 활성화한 뒤 ParryMontage를 재생한다.
+
+```text
+패링 입력
+→ 기존 행동 가능 여부 확인
+→ 패링 쿨다운 확인
+→ 공격, 공중 및 중복 패링 상태 확인
+→ 이동과 달리기 상태 확인
+→ bIsParrying 활성화
+→ ParryMontage 재생
+→ 기존 ParryWindowTimer 시작
+→ 기존 ParryCooldownTimer 시작
+```
+
+몽타주가 지정되지 않았거나 재생에 실패해도 기존 패링 판정과 쿨다운은 계속 작동하도록 구성했다.
+
+### 패링 판정과 애니메이션 상태 분리
+
+실제 공격을 막을 수 있는 패링 판정과 화면에 패링 자세가 재생되는 시간을 분리했다.
+
+```text
+bIsParrying
+→ 실제 패링 판정이 활성화된 상태
+→ ParryWindowDuration에 따라 종료
+
+bIsParryAnimationPlaying
+→ 패링 몽타주가 재생 중인 상태
+→ HandleMontageEnded()에서 종료
+```
+
+패링 판정 시간은 기본 0.2초로 짧지만 몽타주는 그보다 길게 재생될 수 있다. 두 상태를 분리하여 판정이 끝난 뒤에도 애니메이션이 자연스럽게 마무리되도록 했다
+
+### 이동 및 달리기 제한
+
+StartParry()에서 플레이어의 수평 속도를 확인한다.
+
+```text
+수평 속도 10 초과
+→ 이동 중으로 판단
+→ 패링 시작 차단
+```
+
+현재 MaxWalkSpeed가 기본 걷기 속도보다 높으면 달리기 상태로 판단하고 패링 시작을 차단한다.
+
+패링 몽타주가 시작된 이후에는 Move()와 StartSprint()에서 다음 상태를 확인한다.
+
+```text
+bIsParrying == true
+또는
+bIsParryAnimationPlaying == true
+
+→ 이동 입력 차단
+→ 달리기 입력 차단
+```
+
+패링 판정이 먼저 종료되더라도 몽타주가 재생 중이면 이동 제한은 유지된다. HandleMontageEnded()에서 패링 몽타주 종료를 확인하면 bIsParryAnimationPlaying을 해제한다.
+
+플레이어 사망 시에도 패링 애니메이션 재생 상태가 남지 않도록 초기화한다.
+
+### 패링 처리 흐름
+
+```text
+정지 상태에서 마우스 오른쪽 버튼
+→ StartParry()
+→ 패링 가능 조건 확인
+→ bIsParrying = true
+→ AM_Player_Parry 재생
+→ bIsParryAnimationPlaying = true
+
+ParryWindowDuration 경과
+→ EndParry()
+→ bIsParrying = false
+
+패링 몽타주 재생 중
+→ Move() 차단
+→ StartSprint() 차단
+
+AM_Player_Parry 종료 또는 중단
+→ HandleMontageEnded()
+→ bIsParryAnimationPlaying = false
+→ 이동과 달리기 다시 허용
+```
+
+### 테스트 결과
+
+- 정지 상태에서 패링 입력 시 AM_Player_Parry가 재생된다.
+- 패링 몽타주 재생 성공 로그가 출력된다.
+- 이동 중에는 패링을 시작할 수 없다.
+- 달리기 중에는 패링을 시작할 수 없다.
+- 패링 몽타주 재생 중 이동 입력이 차단된다.
+- 패링 몽타주 재생 중 달리기 입력이 차단된다.
+- 몽타주 종료 후 이동과 달리기가 다시 정상적으로 작동한다.
+- 공격, 회피, 공중, 피격 및 사망 중 기존 패링 제한이 유지된다.
+- 기존 패링 판정 시간과 쿨다운이 유지된다.
+- 정면 공격 패링과 후방 공격 차단이 정상적으로 작동한다.
+- 패링 성공 시 피해 무효화, 적 경직과 반격 가능 구간이 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 외부 Paired Animation의 공격자 동작을 플레이어 패링 입력에 재사용하고 있다.
+- 현재 패링 애니메이션은 하나의 방향과 자세만 지원한다.
+- 패링 판정 시간과 애니메이션의 동작 프레임이 Notify로 직접 동기화되어 있지 않다.
+- 패링 성공 전용 애니메이션, 사운드와 이펙트가 없다.
+- 수평 이동 판정 허용값 10은 코드에 직접 작성되어 있다.
+- 다음 단계에서 패링 성공을 명확하게 표현하는 시각 및 청각 피드백을 추가할 예정이다.
