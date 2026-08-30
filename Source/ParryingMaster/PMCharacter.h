@@ -179,6 +179,14 @@ protected:
     )
     float HitStunDuration = 0.5f;
 
+    // 패링 입력 시 재생하는 애니메이션 몽타주입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Parry"
+    )
+    TObjectPtr<UAnimMontage> ParryMontage;
+
     // 패링 성공 판정이 활성화되는 시간입니다.
     UPROPERTY(
         EditDefaultsOnly,
@@ -500,6 +508,9 @@ private:
 
     // 현재 패링 성공 판정이 활성화되어 있는지 나타냅니다.
     bool bIsParrying = false;
+
+    // 현재 패링 몽타주가 재생 중인지 나타냅니다.
+    bool bIsParryAnimationPlaying = false;
 
     // 현재 새로운 패링을 시작할 수 있는지 나타냅니다.
     bool bCanParry = true;

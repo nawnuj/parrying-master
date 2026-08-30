@@ -283,6 +283,14 @@ void APMCharacter::Move(const FInputActionValue& Value)
         return;
     }
 
+    if (
+        bIsParrying
+        || bIsParryAnimationPlaying
+        )
+    {
+        return;
+    }
+
     // IA_Move의 Axis2D 값을 가져옵니다.
     const FVector2D MovementValue =
         Value.Get<FVector2D>();
@@ -365,7 +373,16 @@ void APMCharacter::StartSprint()
         return;
     }
 
-    GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+    if (
+        bIsParrying
+        || bIsParryAnimationPlaying
+        )
+    {
+        return;
+    }
+
+    GetCharacterMovement()->MaxWalkSpeed =
+        SprintSpeed;
 }
 
 void APMCharacter::StopSprint()
@@ -874,8 +891,62 @@ void APMCharacter::StartParry()
         return;
     }
 
+    // 수평 이동 중에는 패링을 시작할 수 없습니다.
+    if (
+        GetVelocity().SizeSquared2D()
+    > FMath::Square(10.0f)
+        )
+    {
+        return;
+    }
+
+    // 달리기 상태에서는 패링을 시작할 수 없습니다.
+    if (
+        GetCharacterMovement()->MaxWalkSpeed
+    > WalkSpeed
+        )
+    {
+        return;
+    }
+
     bIsParrying = true;
     bCanParry = false;
+
+    if (ParryMontage)
+    {
+        const float MontageDuration =
+            PlayAnimMontage(ParryMontage);
+
+        bIsParryAnimationPlaying =
+            MontageDuration > 0.0f;
+
+        if (bIsParryAnimationPlaying)
+        {
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("Parry Montage Played")
+            );
+        }
+        else
+        {
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("Failed to Play Parry Montage")
+            );
+        }
+    }
+    else
+    {
+        bIsParryAnimationPlaying = false;
+
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("Parry Montage Is Not Assigned")
+        );
+    }
 
 
     // 짧은 패링 성공 판정 시간을 시작합니다.
@@ -1085,6 +1156,12 @@ void APMCharacter::HandleMontageEnded(
 )
 {
     (void)bInterrupted;
+
+    if (Montage == ParryMontage)
+    {
+        bIsParryAnimationPlaying = false;
+        return;
+    }
 
     // 회피 몽타주가 끝나면 회피 동작 상태를 종료합니다.
     if (Montage == DodgeMontage)
@@ -1414,6 +1491,7 @@ void APMCharacter::HandleDeath()
     bCanParryCounter = false;
     bIsParryCounterAttacking = false;
     bIsDodgeInvincible = false;
+    bIsParryAnimationPlaying = false;
 
     /*
      * 현재 실행 중인 행동과 몽타주를 정리합니다.
