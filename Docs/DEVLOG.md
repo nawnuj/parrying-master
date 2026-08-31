@@ -2651,3 +2651,188 @@ AM_Player_Parry 종료 또는 중단
 - 패링 성공 전용 애니메이션, 사운드와 이펙트가 없다.
 - 수평 이동 판정 허용값 10은 코드에 직접 작성되어 있다.
 - 다음 단계에서 패링 성공을 명확하게 표현하는 시각 및 청각 피드백을 추가할 예정이다.
+
+---
+
+## 5주차 2일차 — 패링 성공 이펙트와 카메라 흔들림
+
+### 목표
+
+패링 입력 애니메이션과 실제 패링 성공 순간을 명확하게 구분한다. 패링 성공 위치에 짧은 Niagara 섬광을 생성하고 카메라를 흔들어 플레이어가 성공 여부를 즉시 인식할 수 있도록 한다.
+
+### 패링 성공 정보 전달
+
+기존에는 적이 패링 성공을 확정한 뒤 플레이어의 `HandleSuccessfulParry()`를 인자 없이 호출했다.
+
+```text
+APMEnemyCharacter
+→ 패링 성공 판정
+→ PlayerCharacter->HandleSuccessfulParry()
+```
+
+패링 성공 위치를 계산할 수 있도록 적 자신을 공격자 정보로 전달하도록 변경했다.
+
+```text
+APMEnemyCharacter
+→ 패링 성공 판정
+→ PlayerCharacter->HandleSuccessfulParry(this)
+```
+
+APMCharacter::HandleSuccessfulParry()도 공격자를 받을 수 있도록 확장했다.
+
+```text
+HandleSuccessfulParry(const AActor* Attacker)
+```
+
+### 피드백 위치 계산
+
+공격자가 유효하면 플레이어와 공격자의 중간 지점을 패링 성공 위치로 사용한다.
+
+```text
+플레이어 위치
++ 공격자 위치
+→ 두 위치의 중간 지점 계산
+→ Z축 75만큼 추가
+→ 상체 부근 피드백 위치 생성
+```
+
+공격자 정보가 유효하지 않은 경우에는 플레이어 위치에서 정면으로 75만큼 떨어진 지점을 대체 위치로 사용한다.
+
+계산된 위치는 기존 패링 판정을 소비하고 반격 가능 구간을 시작한 뒤 Blueprint 피드백 이벤트에 전달한다.1
+
+### C++과 Blueprint 책임 분리
+
+C++에서는 패링 성공 판정과 피드백 위치 계산을 담당한다.
+
+```text
+C++
+→ 패링 성공 중복 확인
+→ 공격자 기반 위치 계산
+→ 활성 패링 판정 소비
+→ 반격 가능 구간 시작
+→ Blueprint 피드백 요청
+```
+
+시각적인 에셋 재생은 Blueprint가 담당하도록 BlueprintImplementableEvent를 추가했다.
+
+```text
+PlayParrySuccessFeedback(
+    const FVector& EffectLocation
+)
+```
+
+이 구조를 통해 Niagara, 카메라 흔들림과 이후 추가할 사운드를 C++ 재빌드 없이 Blueprint에서 변경할 수 있다.
+
+### Niagara 성공 이펙트
+
+Simple Sprite Burst 템플릿을 이용해 NS_ParrySuccess를 생성했다.
+
+기본 설정은 다음과 같다.
+
+| 항목 | 값 |
+|---|---:|
+| Spawn Count | 4 |
+| Lifetime | 0.2초 |
+| Sprite Size | 80 |
+| Color | 밝은 노란색 |
+| Loop Behavior | Once |
+| Auto Activate | 활성화 |
+| Auto Destroy | 활성화 |
+
+Scale Sprite Size는 파티클의 정규화된 수명에 따라 크기가 감소하도록 구성했다.
+
+```text
+Normalized Age 0.0
+→ Scale 1.0
+
+Normalized Age 1.0
+→ Scale 0.0
+```
+
+Scale Color의 Alpha도 파티클 수명이 끝날 때 0이 되도록 설정하여 섬광이 짧게 나타난 뒤 자연스럽게 사라지도록 했다.
+
+### 카메라 흔들림
+
+DefaultCameraShakeBase를 부모 클래스로 사용하는 BP_ParrySuccessCameraShake를 생성했다.
+
+Root Shake Pattern은 Perlin Noise를 사용하며 짧고 약한 흔들림으로 설정했다.
+
+```text
+Duration: 0.15초
+Blend In Time: 0.02초
+Blend Out Time: 0.05초
+Single Instance: 활성화
+```
+
+Location과 Rotation에 작은 진폭과 높은 주파수를 적용하여 패링 성공 순간만 빠르게 흔들리도록 구성했다. FOV 변화는 적용하지 않았다.
+
+
+### Blueprint 피드백 흐름
+
+BP_PMCharacter에서 C++의 Event PlayParrySuccessFeedback을 구현했다.
+
+```text
+Event PlayParrySuccessFeedback
+→ Effect Location 전달
+→ Spawn System at Location
+→ NS_ParrySuccess 생성
+
+Get Controller
+→ Cast To PlayerController
+→ Get Player Camera Manager
+→ Start Camera Shake
+→ BP_ParrySuccessCameraShake 재생
+```
+
+Get Player Controller의 Input Device 또는 Platform User 버전을 사용하지 않고, 플레이어 캐릭터 자신을 소유한 Controller를 직접 가져오도록 구성했다.
+
+### 전체 처리 흐름
+
+```text
+적 공격 Trace
+→ 플레이어와 충돌
+→ 플레이어 패링 상태 확인
+→ 적 공격의 패링 가능 구간 확인
+→ 플레이어 정면 방향 확인
+→ 패링 성공 확정
+
+APMEnemyCharacter
+→ 공격자 this 전달
+
+APMCharacter
+→ 공격자와 플레이어 중간 위치 계산
+→ 패링 판정 소비
+→ 반격 가능 구간 시작
+→ PlayParrySuccessFeedback 호출
+
+BP_PMCharacter
+→ NS_ParrySuccess 생성
+→ 카메라 흔들림 재생
+
+APMEnemyCharacter
+→ StartParryStun()
+→ 적 공격과 이동 중단
+```
+
+### 테스트 결과
+
+- 패링 입력만 했을 때 성공 이펙트가 발생하지 않는다.
+- 패링 입력만 했을 때 카메라가 흔들리지 않는다.
+- 실제 패링 성공 시에만 Niagara 이펙트가 생성된다.
+- 이펙트가 플레이어와 적 사이의 상체 높이에 나타난다.
+- 패링 성공 순간 카메라가 짧게 흔들린다.
+- 피드백 실행 로그가 정상적으로 출력된다.
+- 패링 성공 후 기존 패링 판정이 즉시 소비된다.
+- 기존 반격 가능 구간이 정상적으로 시작된다.
+- 적 공격 중단과 패링 경직이 정상적으로 작동한다.
+- 패링 실패 시 기존 피해 처리가 유지된다.
+- 반복해서 패링해도 이펙트나 카메라 흔들림이 계속 남지 않는다.
+
+### 현재 한계 및 향후 개선
+
+- 현재 Niagara 이펙트는 기본 Sprite Burst를 이용한 단순한 섬광이다.
+- 캐릭터의 손이나 실제 공격 충돌 지점 대신 플레이어와 적의 중간 위치를 사용한다.
+- 카메라 흔들림은 하나의 고정된 강도만 사용한다.
+- 패링 성공 사운드는 아직 적용하지 않았다.
+- Hit Stop 또는 짧은 시간 감속은 기존 전투 타이머에 영향을 줄 수 있어 적용하지 않았다.
+- 이후 패링 성공 사운드와 반격 가능 상태 UI를 추가할 수 있다.

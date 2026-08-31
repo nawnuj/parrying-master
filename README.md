@@ -63,7 +63,8 @@
 - [x] 플레이어 정면 기준 패링 방향 판정
 - [x] 패링 허용 각도 설정
 - [x] 후방 공격의 패링 성공 차단
-- [ ] 패링 성공 이펙트와 시각적 피드백
+- [x] 패링 성공 Niagara 이펙트와 카메라 흔들림
+- [ ] 패링 성공 사운드
 
 ### 적
 
@@ -127,6 +128,10 @@ Content/
 │     ├─ AM_Player_Dodge
 │     ├─ AM_Player_Parry
 │     └─ AM_Player_Death
+├─ Effects/
+│  └─ Parry/
+│     ├─ BP_ParrySuccessCameraShake
+│     └─ NS_ParrySuccess
 ├─ Blueprints/
 │  ├─ Characters/
 │  │  └─ BP_PMCharacter
@@ -163,11 +168,11 @@ Docs/
 
 | 이름 | 역할 |
 |---|---|
-| `APMCharacter` | 이동, 카메라, 방향 기반 회피 몽타주와 시간 기반 이동, 회피 무적 판정, 공격 및 콤보 단계별 방향 보정과 전진 이동, 3단 콤보, 공격 판정, 피해 차단, 피격 상태, 경직, 타이밍 및 방향 기반 패링, 패링 입력 몽타주와 재생 중 이동 제한, 반격 처리, 사망 몽타주와 지연된 레벨 재시작 관리 |
+| `APMCharacter` | 이동, 카메라, 방향 기반 회피와 무적, 공격 및 3단 콤보, 피해와 피격 상태, 타이밍 및 방향 기반 패링, 패링 입력 몽타주, 성공 위치 계산과 Blueprint 피드백 요청, 반격 처리, 사망 몽타주와 지연된 레벨 재시작 관리 |
 | `UPMHealthComponent` | 플레이어와 적의 최대 체력, 현재 체력, 피해 및 사망 상태 관리 |
-| `APMEnemyCharacter` | 적 캐릭터의 체력, 공격 몽타주, 공통 공격 거리 제공, 근접 공격 판정, 패링 가능 구간, 플레이어 패링 방향 확인, 패링 성공 및 피해 무효화 판정, 패링 경직, 전투 상태 정리 및 사망 처리 |
+| `APMEnemyCharacter` | 적 캐릭터의 체력, 공격 몽타주, 공통 공격 거리 제공, 근접 공격 판정, 패링 가능 구간, 플레이어 패링 방향 확인, 패링 성공 시 공격자 정보 전달과 피해 무효화, 패링 경직, 전투 상태 정리 및 사망 처리 |
 | `APMEnemyAIController` | 플레이어 생존 상태와 적 경직 상태 확인, NavMesh 추적, Enemy Character의 공격 거리 기준을 이용한 공격 요청 및 전투 중단 시 AI 정지 처리 |
-| `BP_PMCharacter` | 플레이어 메시, 애니메이션, 입력 에셋, HUD, 회피 설정값과 회피 및 사망 몽타주 연결 |
+| `BP_PMCharacter` | 플레이어 메시, 애니메이션, 입력 에셋, HUD, 회피 설정값, 회피·패링·사망 몽타주 연결 및 패링 성공 Niagara와 카메라 흔들림 재생 |
 | `BP_EnemyCharacter` | 적 메시, 애니메이션, 체력, 충돌, 카메라 충돌 응답, AI 및 공격 설정 |
 | `ABP_Unarmed` | 플레이어 이동 애니메이션과 전신 공격 몽타주 및 Control Rig 적용 순서 관리 |
 | `ABP_Enemy` | 적의 실제 이동 속도를 이용한 Idle 및 Walk 애니메이션 전환 |
@@ -179,6 +184,8 @@ Docs/
 | `AM_Player_Death` | 플레이어 사망 애니메이션을 재생하고 자동 Blend Out을 막아 마지막 사망 자세를 유지하는 Montage |
 | `AM_Enemy_Attack_01` | 적 공격 애니메이션과 타격 및 패링 가능 구간 Notify 관리 |
 | `WBP_HUD` | 플레이어의 현재 체력을 Progress Bar로 표시 |
+| `NS_ParrySuccess` | 패링 성공 위치에서 짧은 섬광을 재생하는 Niagara System |
+| `BP_ParrySuccessCameraShake` | 패링 성공 순간에 짧은 Perlin Noise 카메라 흔들림을 재생하는 Camera Shake Blueprint |
 | `BP_DamageZone` | 플레이어의 체력 및 사망 기능 테스트 |
 | `BP_TestDummy` | 플레이어 공격의 판정, 피해 및 사망 처리 테스트 |
 
@@ -224,6 +231,10 @@ UE4 Mannequin용 외부 애니메이션 `Paired_CounterPunch_PalmStrike_Att`를 
 
 통합 테스트를 통해 정지 상태의 패링 애니메이션, 기존 패링 판정과 쿨다운, 정면 방향 판정, 적 경직과 반격 기능이 함께 정상적으로 작동하는 것을 확인했다.
 
+적이 패링 성공을 확정할 때 플레이어에게 공격자 정보를 전달하도록 확장하고, 플레이어와 공격자의 중간 지점에 높이 보정을 더해 패링 성공 피드백 위치를 계산하도록 구현했다.
+
+C++의 `BlueprintImplementableEvent`를 통해 `BP_PMCharacter`가 패링 성공 위치에 `NS_ParrySuccess`를 생성하고 전용 카메라 흔들림을 재생하도록 구성했다. 패링 입력만으로는 피드백이 발생하지 않으며, 실제 패링 성공 시에만 이펙트와 카메라 흔들림이 함께 실행된다.
+
 ## 개발 기록
 
 프로젝트의 날짜별 구현 내용과 문제 해결 과정을 기록합니다.
@@ -237,7 +248,8 @@ UE4 Mannequin용 외부 애니메이션 `Paired_CounterPunch_PalmStrike_Att`를 
 - [x] 타이밍 기반 패링 입력과 판정 상태
 - [x] 플레이어 정면 기준 패링 방향 판정
 - [x] 플레이어 패링 입력 애니메이션
-- [ ] 패링 성공 이펙트와 시각적 피드백
+- [x] 패링 성공 Niagara 이펙트와 카메라 흔들림
+- [ ] 패링 성공 사운드
 - [x] 적 공격의 패링 가능 구간
 - [x] 패링 성공 시 피해 무효화
 - [x] 패링 성공 시 적 공격 중단과 경직
