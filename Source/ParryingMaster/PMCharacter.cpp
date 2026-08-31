@@ -837,11 +837,13 @@ bool APMCharacter::CanParryCounter() const
     return bCanParryCounter;
 }
 
-void APMCharacter::HandleSuccessfulParry()
+void APMCharacter::HandleSuccessfulParry(
+    const AActor* Attacker
+)
 {
     /*
-     * 이미 패링 판정이 소비됐다면
-     * 같은 공격에서 성공 처리를 반복하지 않습니다.
+     * 이미 패링 판정이 소비됐다면 같은 공격에서
+     * 성공 처리가 반복되지 않도록 합니다.
      */
     if (!bIsParrying)
     {
@@ -849,14 +851,43 @@ void APMCharacter::HandleSuccessfulParry()
     }
 
     /*
-     * 현재 패링 판정을 즉시 종료합니다.
-     * ParryCooldownTimer는 건드리지 않으므로
+     * 공격자가 유효하면 플레이어와 공격자의 중간 지점을
+     * 패링 성공 피드백 위치로 사용합니다.
+     */
+    FVector EffectLocation =
+        GetActorLocation()
+        + GetActorForwardVector() * 75.0f;
+
+    if (Attacker)
+    {
+        EffectLocation =
+            FMath::Lerp(
+                GetActorLocation(),
+                Attacker->GetActorLocation(),
+                0.5f
+            );
+    }
+
+    // 이펙트가 지면이 아닌 상체 부근에 나타나도록 높입니다.
+    EffectLocation.Z += 75.0f;
+
+    /*
+     * 현재 패링 판정을 즉시 소비합니다.
      * 기존 패링 쿨다운은 그대로 유지됩니다.
      */
     EndParry();
 
+    // 패링 성공 후 반격 가능 시간을 시작합니다.
     StartParryCounterWindow();
 
+    // Blueprint에서 이펙트와 카메라 흔들림을 재생합니다.
+    PlayParrySuccessFeedback(EffectLocation);
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Parry Success Feedback Triggered")
+    );
 }
 
 void APMCharacter::StartParry()

@@ -36,7 +36,9 @@ public:
     ) const;
 
     // 패링 성공을 소비하고 반격 가능 시간을 시작합니다.
-    void HandleSuccessfulParry();
+    void HandleSuccessfulParry(
+        const AActor* Attacker
+    );
 
     // 현재 패링 반격이 가능한 상태인지 반환합니다.
     UFUNCTION(
@@ -226,6 +228,15 @@ protected:
             )
     )
     float ParryFacingAngle = 120.0f;
+
+    // 패링 성공 위치에 Blueprint 시각 및 청각 피드백을 재생합니다.
+    UFUNCTION(
+        BlueprintImplementableEvent,
+        Category = "Combat|Parry"
+    )
+    void PlayParrySuccessFeedback(
+        const FVector& EffectLocation
+    );
 
     // 한 번의 기본 공격으로 주는 피해량입니다.
     UPROPERTY(
