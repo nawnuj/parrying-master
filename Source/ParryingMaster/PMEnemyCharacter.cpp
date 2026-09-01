@@ -43,6 +43,11 @@ void APMEnemyCharacter::BeginPlay()
 
     if (HealthComponent)
     {
+        HealthComponent->OnHealthChanged.AddDynamic(
+            this,
+            &APMEnemyCharacter::HandleHealthChanged
+        );
+
         HealthComponent->OnDeath.AddDynamic(
             this,
             &APMEnemyCharacter::HandleDeath
@@ -59,6 +64,115 @@ void APMEnemyCharacter::BeginPlay()
             &APMEnemyCharacter::HandleMontageNotifyBegin
         );
     }
+}
+
+void APMEnemyCharacter::HandleHealthChanged(
+    float CurrentHealth,
+    float MaxHealth
+)
+{
+    (void)MaxHealth;
+
+    /*
+     * 체력이 0이 된 피해는 일반 피격 반응 대신
+     * HandleDeath()에서 처리합니다.
+     */
+    if (CurrentHealth <= 0.0f)
+    {
+        return;
+    }
+
+    StartHitReaction();
+}
+
+void APMEnemyCharacter::StartHitReaction()
+{
+    if (
+        bIsCombatStopped
+        || bIsParryStunned
+        || bIsHitReacting
+        )
+    {
+        return;
+    }
+
+    if (
+        !HealthComponent
+        || HealthComponent->GetCurrentHealth() <= 0.0f
+        )
+    {
+        return;
+    }
+
+    bIsHitReacting = true;
+
+    CloseParryWindow();
+
+    if (EnemyAttackMontage)
+    {
+        StopAnimMontage(EnemyAttackMontage);
+    }
+
+    GetWorldTimerManager().ClearTimer(
+        AttackCooldownTimer
+    );
+
+    bIsAttacking = false;
+    bCanAttack = false;
+
+    CurrentAttackTarget.Reset();
+
+    if (
+        APMEnemyAIController* EnemyAIController =
+        Cast<APMEnemyAIController>(GetController())
+        )
+    {
+        EnemyAIController->StopMovement();
+    }
+
+    GetCharacterMovement()->StopMovementImmediately();
+
+    if (EnemyHitReactMontage)
+    {
+        PlayAnimMontage(EnemyHitReactMontage);
+    }
+
+    GetWorldTimerManager().SetTimer(
+        HitReactionTimer,
+        this,
+        &APMEnemyCharacter::EndHitReaction,
+        HitReactionDuration,
+        false
+    );
+}
+
+void APMEnemyCharacter::EndHitReaction()
+{
+    GetWorldTimerManager().ClearTimer(
+        HitReactionTimer
+    );
+
+    if (EnemyHitReactMontage)
+    {
+        StopAnimMontage(EnemyHitReactMontage);
+    }
+
+    bIsHitReacting = false;
+
+    if (
+        bIsCombatStopped
+        || bIsParryStunned
+        || (
+            HealthComponent
+            && HealthComponent->IsDead()
+            )
+        )
+    {
+        bCanAttack = false;
+        return;
+    }
+
+    bCanAttack = true;
 }
 
 void APMEnemyCharacter::HandleDeath()
@@ -100,11 +214,17 @@ bool APMEnemyCharacter::IsParryStunned() const
     return bIsParryStunned;
 }
 
+bool APMEnemyCharacter::IsHitReacting() const
+{
+    return bIsHitReacting;
+}
+
 void APMEnemyCharacter::TryAttack(AActor* TargetActor)
 {
     if (
         !bCanAttack
         || bIsAttacking
+        || bIsHitReacting
         || bIsParryStunned
         || bIsCombatStopped
         || !TargetActor
@@ -190,6 +310,16 @@ void APMEnemyCharacter::StopCombat()
         StopAnimMontage(EnemyAttackMontage);
     }
 
+    if (EnemyHitReactMontage)
+    {
+        StopAnimMontage(EnemyHitReactMontage);
+    }
+
+    if (EnemyParryStunMontage)
+    {
+        StopAnimMontage(EnemyParryStunMontage);
+    }
+
     GetWorldTimerManager().ClearTimer(
         AttackCooldownTimer
     );
@@ -198,9 +328,14 @@ void APMEnemyCharacter::StopCombat()
         ParryStunTimer
     );
 
+    GetWorldTimerManager().ClearTimer(
+        HitReactionTimer
+    );
+
     bIsAttacking = false;
     bCanAttack = false;
     bIsParryStunned = false;
+    bIsHitReacting = false;
 
     CurrentAttackTarget.Reset();
 }
@@ -266,13 +401,13 @@ void APMEnemyCharacter::CloseParryWindow()
 
 void APMEnemyCharacter::StartParryStun()
 {
-    // 영구적으로 전투가 중단된 적은 경직을 시작하지 않습니다.
+    // 전투가 영구 중단된 적은 새로운 경직을 시작하지 않습니다.
     if (bIsCombatStopped)
     {
         return;
     }
 
-    // 사망한 적은 경직 상태로 전환하지 않습니다.
+    // 사망한 적은 패링 경직 상태로 전환하지 않습니다.
     if (
         HealthComponent
         && HealthComponent->IsDead()
@@ -281,7 +416,7 @@ void APMEnemyCharacter::StartParryStun()
         return;
     }
 
-    // 이미 경직 중이라면 타이머를 다시 시작하지 않습니다.
+    // 이미 패링 경직 중이라면 중복 실행하지 않습니다.
     if (bIsParryStunned)
     {
         return;
@@ -289,7 +424,22 @@ void APMEnemyCharacter::StartParryStun()
 
     bIsParryStunned = true;
 
-    // 현재 공격의 패링 가능 상태를 종료합니다.
+    /*
+     * 패링 경직이 일반 피격 반응보다 우선하므로
+     * 진행 중인 일반 피격 상태와 타이머를 종료합니다.
+     */
+    GetWorldTimerManager().ClearTimer(
+        HitReactionTimer
+    );
+
+    bIsHitReacting = false;
+
+    if (EnemyHitReactMontage)
+    {
+        StopAnimMontage(EnemyHitReactMontage);
+    }
+
+    // 진행 중인 공격의 패링 가능 구간을 닫습니다.
     CloseParryWindow();
 
     // 패링된 공격 몽타주를 즉시 중단합니다.
@@ -299,8 +449,8 @@ void APMEnemyCharacter::StartParryStun()
     }
 
     /*
-     * 기존 공격 쿨다운이 경직 중 끝나서
-     * 공격 가능 상태를 복구하지 않도록 제거합니다.
+     * 기존 공격 쿨다운이 경직 중 공격 상태를
+     * 다시 복구하지 못하도록 타이머를 제거합니다.
      */
     GetWorldTimerManager().ClearTimer(
         AttackCooldownTimer
@@ -311,7 +461,7 @@ void APMEnemyCharacter::StartParryStun()
 
     CurrentAttackTarget.Reset();
 
-    // 현재 진행 중인 AI 이동을 즉시 중단합니다.
+    // AI Controller가 요청한 이동을 중단합니다.
     if (
         APMEnemyAIController* EnemyAIController =
         Cast<APMEnemyAIController>(GetController())
@@ -320,6 +470,16 @@ void APMEnemyCharacter::StartParryStun()
         EnemyAIController->StopMovement();
     }
 
+    // Character Movement에 남아 있는 속도를 즉시 제거합니다.
+    GetCharacterMovement()->StopMovementImmediately();
+
+    // 패링 성공에 대한 적 경직 애니메이션을 재생합니다.
+    if (EnemyParryStunMontage)
+    {
+        PlayAnimMontage(EnemyParryStunMontage);
+    }
+
+    // 지정된 시간이 지나면 패링 경직 상태를 종료합니다.
     GetWorldTimerManager().SetTimer(
         ParryStunTimer,
         this,
@@ -335,6 +495,10 @@ void APMEnemyCharacter::EndParryStun()
         ParryStunTimer
     );
 
+    if (EnemyParryStunMontage)
+    {
+        StopAnimMontage(EnemyParryStunMontage);
+    }
     /*
      * 사망 또는 플레이어 사망으로 전투가 영구 중단됐다면
      * 공격 가능한 상태로 복구하지 않습니다.
@@ -475,7 +639,11 @@ void APMEnemyCharacter::ResetAttack()
      * 경직 또는 영구 전투 중단 상태에서는
      * 공격 가능한 상태로 복구하지 않습니다.
      */
-    if (bIsParryStunned || bIsCombatStopped)
+    if (
+        bIsHitReacting
+        || bIsParryStunned
+        || bIsCombatStopped
+        )
     {
         bCanAttack = false;
         CurrentAttackTarget.Reset();

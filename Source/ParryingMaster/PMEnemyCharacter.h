@@ -38,6 +38,13 @@ public:
     )
     bool IsParryStunned() const;
 
+    // 현재 일반 피격 반응 중인지 반환합니다.
+    UFUNCTION(
+        BlueprintPure,
+        Category = "Combat|Hit Reaction"
+    )
+    bool IsHitReacting() const;
+
 protected:
     virtual void BeginPlay() override;
 
@@ -54,6 +61,31 @@ protected:
         Category = "Combat"
     )
     TObjectPtr<UAnimMontage> EnemyAttackMontage;
+
+    // 일반 피해를 받았을 때 재생할 피격 몽타주입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Hit Reaction"
+    )
+    TObjectPtr<UAnimMontage> EnemyHitReactMontage;
+
+    // 플레이어의 패링에 성공당했을 때 재생할 경직 몽타주입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Parry"
+    )
+    TObjectPtr<UAnimMontage> EnemyParryStunMontage;
+
+    // 일반 피격으로 인한 행동 제한 시간입니다.
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Combat|Hit Reaction",
+        meta = (ClampMin = "0.05")
+    )
+    float HitReactionDuration = 0.6f;
 
     UPROPERTY(
         EditDefaultsOnly,
@@ -98,6 +130,18 @@ protected:
 
 private:
     UFUNCTION()
+    void HandleHealthChanged(
+        float CurrentHealth,
+        float MaxHealth
+    );
+
+    // 일반 피격 반응을 시작합니다.
+    void StartHitReaction();
+
+    // 일반 피격 반응을 종료합니다.
+    void EndHitReaction();
+
+    UFUNCTION()
     void HandleDeath();
 
     UFUNCTION()
@@ -129,6 +173,9 @@ private:
 
     // 현재 적이 패링으로 인해 경직 중인지 나타냅니다.
     bool bIsParryStunned = false;
+    
+    // 현재 일반 피해로 인해 피격 반응 중인지 나타냅니다.
+    bool bIsHitReacting = false;
 
     // 사망 또는 플레이어 사망으로 전투가 영구 중단됐는지 나타냅니다.
     bool bIsCombatStopped = false;
@@ -136,6 +183,9 @@ private:
     TWeakObjectPtr<AActor> CurrentAttackTarget;
 
     FTimerHandle AttackCooldownTimer;
+
+    // 일반 피격 반응의 종료 시점을 관리합니다.
+    FTimerHandle HitReactionTimer;
 
     // 패링 경직 종료 시점을 관리합니다.
     FTimerHandle ParryStunTimer;

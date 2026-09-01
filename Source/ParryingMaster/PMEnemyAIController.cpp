@@ -66,10 +66,13 @@ void APMEnemyAIController::Tick(float DeltaSeconds)
         return;
     }
     /*
-    * 패링 경직 중에는 플레이어 추적과 공격을 모두 중단합니다.
-    * 경직 해제는 EnemyCharacter의 ParryStunTimer가 담당합니다.
+    * 일반 피격 또는 패링 경직 중에는
+    * 플레이어 추적과 공격 요청을 중단합니다.
     */
-    if (EnemyCharacter->IsParryStunned())
+    if (
+        EnemyCharacter->IsHitReacting()
+        || EnemyCharacter->IsParryStunned()
+        )
     {
         StopMovement();
         return;
