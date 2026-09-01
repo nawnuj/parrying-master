@@ -92,7 +92,7 @@
 - [x] 패링 성공 시 적 경직과 전투 행동 제한
 - [x] 경직 종료 후 추적 및 공격 복구
 - [x] 사망 및 전투 중단 시 경직 타이머 정리
-- [ ] 적 피격 및 경직 애니메이션
+- [x] 적 일반 피격 및 패링 경직 애니메이션
 
 ### 기타
 
@@ -121,7 +121,9 @@ Content/
 ├─ Animations/
 │  ├─ Enemies/
 │  │  ├─ ABP_Enemy
-│  │  └─ AM_Enemy_Attack_01
+│  │  ├─ AM_Enemy_Attack_01
+│  │  ├─ AM_Enemy_HitReact
+│  │  └─ AM_Enemy_ParryStun
 │  └─ Player/
 │     ├─ AM_Player_Attack_01
 │     ├─ AM_Player_HitReact
@@ -170,10 +172,10 @@ Docs/
 |---|---|
 | `APMCharacter` | 이동, 카메라, 방향 기반 회피와 무적, 공격 및 3단 콤보, 피해와 피격 상태, 타이밍 및 방향 기반 패링, 패링 입력 몽타주, 성공 위치 계산과 Blueprint 피드백 요청, 반격 처리, 사망 몽타주와 지연된 레벨 재시작 관리 |
 | `UPMHealthComponent` | 플레이어와 적의 최대 체력, 현재 체력, 피해 및 사망 상태 관리 |
-| `APMEnemyCharacter` | 적 캐릭터의 체력, 공격 몽타주, 공통 공격 거리 제공, 근접 공격 판정, 패링 가능 구간, 플레이어 패링 방향 확인, 패링 성공 시 공격자 정보 전달과 피해 무효화, 패링 경직, 전투 상태 정리 및 사망 처리 |
-| `APMEnemyAIController` | 플레이어 생존 상태와 적 경직 상태 확인, NavMesh 추적, Enemy Character의 공격 거리 기준을 이용한 공격 요청 및 전투 중단 시 AI 정지 처리 |
+| `APMEnemyCharacter` | 적 캐릭터의 체력, 공격과 일반 피격 상태, 공격 및 피격 몽타주, 근접 공격 판정, 패링 가능 구간, 패링 성공 시 피해 무효화와 전용 경직 몽타주, 상태별 타이머, 전투 중단 및 사망 처리 |
+| `APMEnemyAIController` | 플레이어 생존 상태와 적의 일반 피격 및 패링 경직 상태를 확인하고, NavMesh 추적과 공격 요청 및 전투 중단 시 AI 정지를 처리 |
 | `BP_PMCharacter` | 플레이어 메시, 애니메이션, 입력 에셋, HUD, 회피 설정값, 회피·패링·사망 몽타주 연결 및 패링 성공 Niagara와 카메라 흔들림 재생 |
-| `BP_EnemyCharacter` | 적 메시, 애니메이션, 체력, 충돌, 카메라 충돌 응답, AI 및 공격 설정 |
+| `BP_EnemyCharacter` | 적 메시, 애니메이션 블루프린트, 체력, 충돌, AI, 공격 설정과 일반 피격 및 패링 경직 몽타주 연결 |
 | `ABP_Unarmed` | 플레이어 이동 애니메이션과 전신 공격 몽타주 및 Control Rig 적용 순서 관리 |
 | `ABP_Enemy` | 적의 실제 이동 속도를 이용한 Idle 및 Walk 애니메이션 전환 |
 | `BP_ParryingGameMode` | 기본 플레이어 캐릭터 설정 |
@@ -183,6 +185,8 @@ Docs/
 | `AM_Player_Parry` | 플레이어 패링 입력 동작을 재생하며 패링 판정 시간과 독립적으로 시각적 동작을 표현하는 Montage |
 | `AM_Player_Death` | 플레이어 사망 애니메이션을 재생하고 자동 Blend Out을 막아 마지막 사망 자세를 유지하는 Montage |
 | `AM_Enemy_Attack_01` | 적 공격 애니메이션과 타격 및 패링 가능 구간 Notify 관리 |
+| `AM_Enemy_HitReact` | 적이 일반 피해를 받았을 때 피격 동작을 재생하는 Montage |
+| `AM_Enemy_ParryStun` | 플레이어의 패링 성공으로 적이 경직됐을 때 재생되는 Montage |
 | `WBP_HUD` | 플레이어의 현재 체력을 Progress Bar로 표시 |
 | `NS_ParrySuccess` | 패링 성공 위치에서 짧은 섬광을 재생하는 Niagara System |
 | `BP_ParrySuccessCameraShake` | 패링 성공 순간에 짧은 Perlin Noise 카메라 흔들림을 재생하는 Camera Shake Blueprint |
@@ -235,6 +239,14 @@ UE4 Mannequin용 외부 애니메이션 `Paired_CounterPunch_PalmStrike_Att`를 
 
 C++의 `BlueprintImplementableEvent`를 통해 `BP_PMCharacter`가 패링 성공 위치에 `NS_ParrySuccess`를 생성하고 전용 카메라 흔들림을 재생하도록 구성했다. 패링 입력만으로는 피드백이 발생하지 않으며, 실제 패링 성공 시에만 이펙트와 카메라 흔들림이 함께 실행된다.
 
+외부 애니메이션 `Paired_PushShove_Vic`과 `Paired_CounterPunch_PalmStrike_Vic`을 적 캐릭터 스켈레톤으로 리타기팅하여 `A_Enemy_HitReact`, `A_Enemy_ParryStun`과 각각의 Montage를 생성했다.
+
+적의 체력 변경 이벤트를 이용해 일반 피해를 감지하고, 피격 중에는 공격과 AI 추적을 제한하도록 구현했다. 일반 피격 시간이 종료되면 생존 및 전투 상태를 확인한 뒤 추적과 공격을 복구한다.
+
+기존 패링 경직 상태에는 전용 몽타주를 연결했다. 패링 경직이 일반 피격보다 우선하도록 상태와 타이머를 정리했으며, 경직 중 반격 피해를 받아도 일반 피격 몽타주가 패링 경직 몽타주를 덮어쓰지 않도록 구성했다.
+
+통합 테스트를 통해 일반 피격, 패링 경직, 반격 피해, 전투 복구 및 사망 시 상태 정리가 함께 정상적으로 작동하는 것을 확인했다.
+
 ## 개발 기록
 
 프로젝트의 날짜별 구현 내용과 문제 해결 과정을 기록합니다.
@@ -253,6 +265,7 @@ C++의 `BlueprintImplementableEvent`를 통해 `BP_PMCharacter`가 패링 성공
 - [x] 적 공격의 패링 가능 구간
 - [x] 패링 성공 시 피해 무효화
 - [x] 패링 성공 시 적 공격 중단과 경직
+- [x] 적 일반 피격 및 패링 경직 애니메이션
 - [x] 패링 후 반격 가능 구간
 - [x] 기존 Attack1을 재사용한 패링 반격 공격과 강화 피해
 - [x] 공격 시작 시 이동 입력 방향 보정
