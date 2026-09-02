@@ -3009,3 +3009,176 @@ TryAttack()과 ResetAttack()에도 일반 피격 상태 검사를 추가하여 �
 - 피격과 패링 경직 시간은 Montage Notify가 아니라 고정된 타이머로 관리한다.
 - 일반 피격 애니메이션의 밀려나는 동작은 시각적 표현이며 실제 넉백은 적용하지 않는다.
 - 애니메이션 길이와 행동 제한 시간은 이후 전투 밸런스에 맞춰 조정할 수 있다.
+
+---
+
+## 5주차 4일차 — 반격 가능 상태와 남은 시간 HUD
+
+### 목표
+
+플레이어가 패링에 성공한 뒤 제한된 시간 안에 강화 반격을 사용할 수 있다는 사실을 화면에서 확인할 수 있도록 반격 가능 상태와 남은 시간을 HUD에 표시한다.
+
+외부 효과음은 이용 조건과 저작권 문제를 고려하여 이번 프로젝트 범위에서 제외하고, 기존 Niagara 이펙트와 카메라 흔들림을 패링 성공 피드백으로 유지한다.
+
+### 기존 반격 상태 활용
+
+기존 `APMCharacter`에는 현재 반격 가능 여부를 반환하는 함수가 구현되어 있다.
+
+```cpp
+bool CanParryCounter() const;
+```
+
+반격 가능 상태는 다음 상황에서 변경된다.
+
+```text
+패링 성공
+→ bCanParryCounter = true
+→ 반격 가능 타이머 시작
+
+반격 공격 입력
+→ 반격 기회 소비
+→ bCanParryCounter = false
+
+반격 가능 시간 만료
+→ bCanParryCounter = false
+
+플레이어 사망
+→ 반격 상태와 타이머 정리
+```
+
+HUD는 별도의 반격 상태를 만들지 않고 기존 bCanParryCounter를 화면에 표현한다.
+
+### 남은 반격 시간 비율
+Progress Bar에서 사용할 수 있도록 다음 Blueprint Pure 함수를 추가했다.
+
+```cpp
+float GetParryCounterWindowPercent() const;
+```
+
+함수는 기존 ParryCounterWindowTimer의 남은 시간을 가져와 전체 반격 가능 시간으로 나눈다.
+
+```text
+남은 반격 시간
+÷
+전체 반격 가능 시간
+→ 0~1 비율
+```
+
+반격 가능 상태가 아니거나 타이머가 종료됐거나 전체 시간이 올바르지 않으면 0.0을 반환한다.
+
+```cpp
+RemainingTime / ParryCounterWindowDuration
+```
+
+계산 결과에는 FMath::Clamp()를 적용하여 Progress Bar에 유효한 0~1 범위만 전달한다.
+
+### HUD 구성
+
+기존 WBP_HUD에 다음 위젯을 추가했다.
+
+```text
+Canvas Panel
+└─ CounterContainer
+   └─ CounterVerticalBox
+      ├─ CounterText
+      └─ CounterProgressBar
+```
+
+각 위젯의 역할은 다음과 같다.
+
+| 위젯 | 역할 |
+|---|---|
+| `CounterContainer` | 반격 UI 전체의 표시 여부 관리 |
+| `CounterVerticalBox` | 안내 문구와 Progress Bar를 세로로 정렬 |
+| `CounterText` | 반격 가능 상태 안내 |
+| `CounterProgressBar` | 남은 반격 시간을 시각적으로 표시 |
+
+CounterContainer의 Border Brush는 Alpha를 0으로 설정하여 흰색 기본 배경을 제거했다. 부모 컨테이너의 Visibility가 변경되면 안내 문구와 Progress Bar도 함께 표시되거나 숨겨진다.
+
+### 반격 UI 표시 바인딩
+
+CounterContainer의 Visibility를 기존 CanParryCounter()와 연결했다.
+
+```text
+Get Owning Player Pawn
+→ Cast To PMCharacter
+→ CanParryCounter()
+```
+
+반환값에 따라 다음 Visibility를 사용한다.
+
+```text
+반격 가능
+→ Visible
+
+반격 불가능
+→ Collapsed
+
+플레이어 캐릭터 Cast 실패
+→ Collapsed
+```
+
+Hidden 대신 Collapsed를 사용하여 반격 UI가 보이지 않을 때 화면 배치 공간도 차지하지 않도록 했다.
+
+### Progress Bar 바인딩
+
+CounterProgressBar의 Percent를 GetParryCounterWindowPercent()와 연결했다.
+
+```text
+Get Owning Player Pawn
+→ Cast To PMCharacter
+→ GetParryCounterWindowPercent()
+→ Progress Bar Percent
+```
+
+Cast에 실패하면 0.0을 반환한다.
+
+패링 성공 직후 Progress Bar는 1.0에 가까운 값으로 표시되고, 반격 가능 시간이 지나면서 0.0까지 감소한다.
+
+### 전체 처리 흐름
+
+```text
+패링 성공
+→ 기존 반격 가능 구간 시작
+→ CanParryCounter() == true
+→ CounterContainer 표시
+→ Progress Bar 감소 시작
+```
+
+```text
+반격 가능 시간 안에 공격
+→ 반격 기회 소비
+→ CanParryCounter() == false
+→ CounterContainer 즉시 숨김
+→ 첫 타격에 강화 피해 적용
+```
+
+```text
+공격하지 않고 제한 시간 경과
+→ EndParryCounterWindow()
+→ CanParryCounter() == false
+→ Progress Bar 0
+→ CounterContainer 숨김
+```
+
+### 테스트 결과
+
+- 평상시에는 반격 UI가 표시되지 않는다.
+- 패링에 실패하면 반격 UI가 표시되지 않는다.
+- 실제 패링 성공 시에만 반격 안내 문구와 Progress Bar가 표시된다.
+- 패링 성공 직후 Progress Bar가 가득 찬 상태로 표시된다.
+- 반격 가능 시간이 지나면서 Progress Bar가 감소한다.
+- 반격 가능 시간 안에 공격하면 UI가 즉시 숨겨진다.
+- 반격 공격의 첫 타격에 기존 강화 피해 40이 적용된다.
+- 공격하지 않으면 제한 시간 만료 후 UI가 자동으로 숨겨진다.
+- 반복해서 패링해도 Progress Bar가 정상적으로 다시 시작된다.
+- 플레이어 사망과 레벨 재시작 이후 UI가 숨겨진 상태로 초기화된다.
+- 기존 체력 HUD가 정상적으로 유지된다.
+
+### 현재 한계 및 향후 개선
+
+- 반격 UI는 안내 문구와 단색 Progress Bar로만 구성되어 있다.
+- UI 표시와 Percent 계산은 UMG Property Binding을 사용하므로 화면이 갱신될 때 함수를 반복 호출한다.
+- 반격 가능 상태 시작과 종료에 별도의 Widget Animation이 없다.
+- 반격 시간이 거의 끝났을 때 색상이나 깜빡임으로 경고하지 않는다.
+- 패링 성공 사운드는 외부 효과음의 이용 조건과 저작권 문제를 고려하여 이번 프로젝트 범위에서 제외했다.
