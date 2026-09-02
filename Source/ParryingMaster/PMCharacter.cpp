@@ -837,6 +837,41 @@ bool APMCharacter::CanParryCounter() const
     return bCanParryCounter;
 }
 
+float APMCharacter::GetParryCounterWindowPercent() const
+{
+    /*
+     * 반격 가능 상태가 아니거나 지속 시간이 잘못 설정됐다면
+     * Progress Bar를 비어 있는 상태로 반환합니다.
+     */
+    if (
+        !bCanParryCounter
+        || ParryCounterWindowDuration <= KINDA_SMALL_NUMBER
+        )
+    {
+        return 0.0f;
+    }
+
+    const float RemainingTime =
+        GetWorldTimerManager().GetTimerRemaining(
+            ParryCounterWindowTimer
+        );
+
+    /*
+     * 타이머가 존재하지 않거나 이미 종료됐다면
+     * 남은 시간이 없는 것으로 처리합니다.
+     */
+    if (RemainingTime <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    return FMath::Clamp(
+        RemainingTime / ParryCounterWindowDuration,
+        0.0f,
+        1.0f
+    );
+}
+
 void APMCharacter::HandleSuccessfulParry(
     const AActor* Attacker
 )

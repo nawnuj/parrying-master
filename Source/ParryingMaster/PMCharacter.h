@@ -47,6 +47,13 @@ public:
     )
     bool CanParryCounter() const;
 
+    // 남아 있는 패링 반격 가능 시간을 0~1 비율로 반환합니다.
+    UFUNCTION(
+        BlueprintPure,
+        Category = "Combat|Parry"
+    )
+    float GetParryCounterWindowPercent() const;
+
     // 회피 무적 상태를 확인한 뒤 피해를 처리합니다.
     virtual float TakeDamage(
         float DamageAmount,
@@ -229,7 +236,7 @@ protected:
     )
     float ParryFacingAngle = 120.0f;
 
-    // 패링 성공 위치에 Blueprint 시각 및 청각 피드백을 재생합니다.
+    // 패링 성공 위치에 Blueprint 시각 피드백을 재생합니다.
     UFUNCTION(
         BlueprintImplementableEvent,
         Category = "Combat|Parry"
